@@ -8,7 +8,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Load the Vercel serverless function
-const manageUserHandler = require('./api/manage-user.cjs');
+const manageUserHandler = require('./api/manage-user.js');
 
 // Mock the Vercel API environment
 app.all('/api/manage-user', async (req, res) => {
