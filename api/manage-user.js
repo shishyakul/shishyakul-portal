@@ -1,26 +1,40 @@
-const { initializeApp, getApps, cert } = require('firebase-admin/app');
-const { getAuth } = require('firebase-admin/auth');
-const { getFirestore } = require('firebase-admin/firestore');
-
-// Initialize Firebase Admin (singleton)
+// We will dynamically import firebase-admin inside the handler 
+// to prevent Vercel cold-start ESM crashes and catch any import errors.
 let adminApp;
-if (getApps().length === 0) {
-  adminApp = initializeApp({
-    credential: cert({
-      projectId:   process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey:  process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-} else {
-  adminApp = getApps()[0];
+let adminAuth;
+let adminDb;
+
+async function getAdminApp() {
+  if (adminApp) return { adminApp, adminAuth, adminDb };
+
+  // Dynamic imports bypass the Vercel ESM jose bug during the build phase
+  const { initializeApp, getApps, cert } = await import('firebase-admin/app');
+  const { getAuth } = await import('firebase-admin/auth');
+  const { getFirestore } = await import('firebase-admin/firestore');
+
+  if (getApps().length === 0) {
+    adminApp = initializeApp({
+      credential: cert({
+        projectId:   process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey:  process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  } else {
+    adminApp = getApps()[0];
+  }
+
+  adminAuth = getAuth;
+  adminDb = getFirestore(adminApp);
+
+  return { adminApp, adminAuth, adminDb };
 }
 
-const db = getFirestore(adminApp);
-const auth = getAuth(adminApp);
-
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   try {
+    const { adminAuth, adminDb } = await getAdminApp();
+    const auth = adminAuth();
+
     // 1. Verify Authorization Header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -38,7 +52,7 @@ module.exports = async function handler(req, res) {
     const adminUid = decodedToken.uid;
 
     // 2. Verify Caller is Admin in Firestore
-    const adminDoc = await db.collection('users').doc(adminUid).get();
+    const adminDoc = await adminDb.collection('users').doc(adminUid).get();
     if (!adminDoc.exists || adminDoc.data().role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin access required' });
     }
@@ -69,6 +83,6 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('[/api/manage-user] Error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: `Internal server error: ${error.message}` });
   }
-};
+}

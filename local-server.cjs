@@ -7,12 +7,11 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Load the Vercel serverless function
-const manageUserHandler = require('./api/manage-user.js');
-
 // Mock the Vercel API environment
 app.all('/api/manage-user', async (req, res) => {
   try {
+    const module = await import('./api/manage-user.js');
+    const manageUserHandler = module.default;
     await manageUserHandler(req, res);
   } catch (err) {
     console.error('API Error:', err);
