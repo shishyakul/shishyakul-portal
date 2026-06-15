@@ -4,31 +4,60 @@ import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const ROLES = ['admin', 'teacher', 'student'];
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState({ email: '', fullName: '', role: 'student', uid: '' });
+  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'student', password: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
   const handleSave = async () => {
-    if (!form.uid.trim() || !form.email.trim() || !form.fullName.trim()) {
-      setError('All fields are required. UID comes from Firebase Auth Users tab.');
+    if (!form.email.trim() || !form.fullName.trim() || !form.password.trim()) {
+      setError('Name, Email, and Password are required.');
       return;
     }
     setSaving(true);
+    setError('');
+    
     try {
-      await setDoc(doc(db, 'users', form.uid.trim()), {
+      // 1. Create User in Firebase Auth via REST API to avoid signing out the current admin
+      const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+      const authRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email.trim(),
+          password: form.password,
+          returnSecureToken: true
+        })
+      });
+
+      const authData = await authRes.json();
+      
+      if (!authRes.ok || authData.error) {
+        throw new Error(authData.error?.message || 'Failed to create user account');
+      }
+
+      const newUid = authData.localId;
+
+      // 2. Save User Profile in Firestore
+      await setDoc(doc(db, 'users', newUid), {
         email:     form.email.trim(),
         fullName:  form.fullName.trim(),
+        mobile:    form.mobile.trim(),
         role:      form.role,
         createdAt: serverTimestamp(),
       });
+
       onSaved();
       onClose();
     } catch (e) {
-      setError(e.message);
+      let msg = e.message;
+      if (msg.includes('EMAIL_EXISTS')) msg = 'This email address is already in use by another account.';
+      if (msg.includes('WEAK_PASSWORD')) msg = 'Password should be at least 6 characters.';
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -39,8 +68,7 @@ function AddUserModal({ onClose, onSaved }) {
       <div className="modal-box">
         <h2 className="modal-title">Add New User</h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
-          First create the user in <strong>Firebase Console → Authentication → Users</strong>,
-          then paste their UID here to link their profile.
+          Create an account and assign a role. You can share these credentials with the user to let them log in.
         </p>
 
         {error && (
@@ -54,16 +82,6 @@ function AddUserModal({ onClose, onSaved }) {
         )}
 
         <div className="form-group">
-          <label className="form-label">Firebase UID *</label>
-          <input
-            className="portal-input"
-            placeholder="e.g. abc123XYZ..."
-            value={form.uid}
-            onChange={e => setForm(f => ({ ...f, uid: e.target.value }))}
-            style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}
-          />
-        </div>
-        <div className="form-group">
           <label className="form-label">Full Name *</label>
           <input
             className="portal-input"
@@ -72,33 +90,61 @@ function AddUserModal({ onClose, onSaved }) {
             onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
           />
         </div>
-        <div className="form-group">
-          <label className="form-label">Email Address *</label>
-          <input
-            className="portal-input"
-            type="email"
-            placeholder="user@shishyakul.in"
-            value={form.email}
-            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-          />
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">Email Address *</label>
+            <input
+              className="portal-input"
+              type="email"
+              placeholder="user@shishyakul.in"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">Mobile Number</label>
+            <input
+              className="portal-input"
+              type="tel"
+              placeholder="+91..."
+              value={form.mobile}
+              onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))}
+            />
+          </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Role *</label>
-          <select
-            className="portal-select"
-            value={form.role}
-            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-          >
-            {ROLES.map(r => (
-              <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
-            ))}
-          </select>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">Temporary Password *</label>
+            <input
+              className="portal-input"
+              type="text"
+              placeholder="Min. 6 characters"
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Role *</label>
+            <select
+              className="portal-select"
+              value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+            >
+              {ROLES.map(r => (
+                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-brand" onClick={handleSave} disabled={saving}>
-            {saving ? <><span className="spinner" /> Saving…</> : 'Add User'}
+            {saving ? <><span className="spinner" /> Creating…</> : 'Create Account'}
           </button>
         </div>
       </div>
@@ -107,17 +153,55 @@ function AddUserModal({ onClose, onSaved }) {
 }
 
 function EditUserModal({ user, onClose, onSaved }) {
-  const [form, setForm]     = useState({ fullName: user.fullName, role: user.role });
+  const { user: adminUser } = useAuth();
+  const [form, setForm]     = useState({ 
+    fullName: user.fullName || '', 
+    email: user.email || '',
+    mobile: user.mobile || '',
+    role: user.role || 'student',
+    newPassword: ''
+  });
   const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
 
   const handleSave = async () => {
+    if (!form.fullName.trim() || !form.email.trim()) {
+      setError('Name and Email are required.');
+      return;
+    }
     setSaving(true);
+    setError('');
     try {
-      await updateDoc(doc(db, 'users', user.id), { fullName: form.fullName, role: form.role });
+      // 1. Update sensitive fields via Backend API (Password, Auth Email)
+      if (form.newPassword || form.email !== user.email) {
+        const token = await adminUser.getIdToken();
+        const apiRes = await fetch(`/api/manage-user?uid=${user.id}`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            email: form.email !== user.email ? form.email : undefined,
+            password: form.newPassword ? form.newPassword : undefined
+          })
+        });
+        const apiData = await apiRes.json();
+        if (!apiRes.ok) throw new Error(apiData.error || 'Failed to update user auth details');
+      }
+
+      // 2. Update profile in Firestore
+      await updateDoc(doc(db, 'users', user.id), { 
+        fullName: form.fullName.trim(), 
+        email: form.email.trim(),
+        mobile: form.mobile.trim(),
+        role: form.role 
+      });
+
       onSaved();
       onClose();
     } catch (e) {
-      console.error(e);
+      setError(e.message);
     } finally {
       setSaving(false);
     }
@@ -127,24 +211,139 @@ function EditUserModal({ user, onClose, onSaved }) {
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box">
         <h2 className="modal-title">Edit User</h2>
+
+        {error && (
+          <div style={{
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 10, padding: '10px 14px', fontSize: 13,
+            color: 'var(--status-error)', marginBottom: 16,
+          }}>
+            {error}
+          </div>
+        )}
+
         <div className="form-group">
           <label className="form-label">Full Name</label>
           <input className="portal-input" value={form.fullName}
             onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} />
         </div>
-        <div className="form-group">
-          <label className="form-label">Role</label>
-          <select className="portal-select" value={form.role}
-            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-            {ROLES.map(r => (
-              <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
-            ))}
-          </select>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">Email Address</label>
+            <input className="portal-input" type="email" value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mobile Number</label>
+            <input className="portal-input" type="tel" value={form.mobile}
+              onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} />
+          </div>
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">New Password</label>
+            <input className="portal-input" type="text" placeholder="Leave blank to keep current" value={form.newPassword}
+              onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Role</label>
+            <select className="portal-select" value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+              {ROLES.map(r => (
+                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-brand" onClick={handleSave} disabled={saving}>
             {saving ? <><span className="spinner" /> Saving…</> : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteUserModal({ user, onClose, onSaved }) {
+  const { user: adminUser } = useAuth();
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      const token = await adminUser.getIdToken();
+      
+      // 1. Delete from Firebase Auth via Backend API
+      const apiRes = await fetch(`/api/manage-user?uid=${user.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const apiData = await apiRes.json();
+      if (!apiRes.ok) throw new Error(apiData.error || 'Failed to delete Auth account');
+
+      // 2. Delete from Firestore
+      await deleteDoc(doc(db, 'users', user.id));
+      
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setDeleting(false);
+    }
+  };
+
+  const isConfirmed = confirmText === user.email;
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-box" style={{ borderTop: '4px solid var(--status-error)' }}>
+        <h2 className="modal-title" style={{ color: 'var(--status-error)' }}>Delete User Permanently</h2>
+        
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
+          You are about to permanently delete the profile and login credentials for <strong>{user.fullName}</strong>. 
+          This action <strong>cannot be undone</strong>.
+        </div>
+
+        {error && (
+          <div style={{
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 10, padding: '10px 14px', fontSize: 13,
+            color: 'var(--status-error)', marginBottom: 16,
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label">
+            Please type <strong>{user.email}</strong> to confirm.
+          </label>
+          <input 
+            className="portal-input" 
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            onPaste={e => e.preventDefault()} // Prevent pasting to enforce typing
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} disabled={deleting}>Cancel</button>
+          <button 
+            className="btn btn-danger" 
+            onClick={handleDelete} 
+            disabled={!isConfirmed || deleting}
+            style={{ opacity: isConfirmed ? 1 : 0.5 }}
+          >
+            {deleting ? <><span className="spinner" /> Deleting…</> : 'Delete Permanently'}
           </button>
         </div>
       </div>
@@ -159,9 +358,9 @@ export default function Users() {
   const [loading, setLoading]     = useState(true);
   const [showAdd, setShowAdd]     = useState(false);
   const [editUser, setEditUser]   = useState(null);
+  const [deleteUser, setDeleteUser] = useState(null);
   const [search, setSearch]       = useState('');
   const [filterRole, setFilter]   = useState('all');
-  const [deleting, setDeleting]   = useState(null);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -191,6 +390,7 @@ export default function Users() {
     <div>
       {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onSaved={fetchUsers} />}
       {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={fetchUsers} />}
+      {deleteUser && <DeleteUserModal user={deleteUser} onClose={() => setDeleteUser(null)} onSaved={fetchUsers} />}
 
       <div className="page-header">
         <div>
@@ -273,13 +473,9 @@ export default function Users() {
                       </button>
                       <button
                         className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(u.id, u.fullName)}
-                        disabled={deleting === u.id}
+                        onClick={() => setDeleteUser(u)}
                       >
-                        {deleting === u.id
-                          ? <span className="spinner" style={{ width: 14, height: 14 }} />
-                          : <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
-                        }
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
                       </button>
                     </div>
                   </td>
