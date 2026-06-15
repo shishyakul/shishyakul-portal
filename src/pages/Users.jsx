@@ -4,7 +4,6 @@ import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useAuth } from '../contexts/AuthContext';
 
 const ROLES = ['admin', 'teacher', 'student'];
 
@@ -153,54 +152,57 @@ function AddUserModal({ onClose, onSaved }) {
 }
 
 function EditUserModal({ user, onClose, onSaved }) {
-  const { user: adminUser } = useAuth();
   const [form, setForm]     = useState({ 
     fullName: user.fullName || '', 
-    email: user.email || '',
-    mobile: user.mobile || '',
-    role: user.role || 'student',
-    newPassword: ''
+    email: user.email || '', 
+    mobile: user.mobile || '', 
+    role: user.role || 'student', 
+    password: '' 
   });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
   const handleSave = async () => {
-    if (!form.fullName.trim() || !form.email.trim()) {
+    if (!form.email.trim() || !form.fullName.trim()) {
       setError('Name and Email are required.');
       return;
     }
     setSaving(true);
     setError('');
+
     try {
-      // 1. Update sensitive fields via Backend API (Password, Auth Email)
-      if (form.newPassword || form.email !== user.email) {
-        const token = await adminUser.getIdToken();
-        const apiRes = await fetch(`/api/manage-user?uid=${user.id}`, {
+      // 1. If email, password, or name changed, update Firebase Auth via our secure API
+      if (form.email !== user.email || form.password || form.fullName !== user.fullName) {
+        // In local dev, vite proxies /api to localhost:3000
+        const isLocal = window.location.hostname === 'localhost';
+        const apiUrl = isLocal ? 'http://localhost:3000/api/manageUser' : '/api/manageUser';
+        
+        const res = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            uid: user.id,
             email: form.email !== user.email ? form.email : undefined,
-            password: form.newPassword ? form.newPassword : undefined
+            password: form.password ? form.password : undefined,
+            fullName: form.fullName !== user.fullName ? form.fullName : undefined
           })
         });
-        const apiData = await apiRes.json();
-        if (!apiRes.ok) throw new Error(apiData.error || 'Failed to update user auth details');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update Auth credentials');
       }
 
-      // 2. Update profile in Firestore
+      // 2. Update Firestore profile
       await updateDoc(doc(db, 'users', user.id), { 
-        fullName: form.fullName.trim(), 
-        email: form.email.trim(),
-        mobile: form.mobile.trim(),
+        fullName: form.fullName, 
+        email: form.email,
+        mobile: form.mobile,
         role: form.role 
       });
 
       onSaved();
       onClose();
     } catch (e) {
+      console.error(e);
       setError(e.message);
     } finally {
       setSaving(false);
@@ -211,6 +213,9 @@ function EditUserModal({ user, onClose, onSaved }) {
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box">
         <h2 className="modal-title">Edit User</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+          Changes to email or password will take effect immediately.
+        </p>
 
         {error && (
           <div style={{
@@ -243,9 +248,9 @@ function EditUserModal({ user, onClose, onSaved }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="form-group">
-            <label className="form-label">New Password</label>
-            <input className="portal-input" type="text" placeholder="Leave blank to keep current" value={form.newPassword}
-              onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))} />
+            <label className="form-label">Set New Password</label>
+            <input className="portal-input" type="text" placeholder="Leave blank to keep current" value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
           </div>
           <div className="form-group">
             <label className="form-label">Role</label>
@@ -270,69 +275,38 @@ function EditUserModal({ user, onClose, onSaved }) {
 }
 
 function DeleteUserModal({ user, onClose, onSaved }) {
-  const { user: adminUser } = useAuth();
-  const [confirmText, setConfirmText] = useState('');
+  const [confirmName, setConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState('');
 
   const handleDelete = async () => {
     setDeleting(true);
-    setError('');
     try {
-      const token = await adminUser.getIdToken();
-      
-      // 1. Delete from Firebase Auth via Backend API
-      const apiRes = await fetch(`/api/manage-user?uid=${user.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const apiData = await apiRes.json();
-      if (!apiRes.ok) throw new Error(apiData.error || 'Failed to delete Auth account');
-
-      // 2. Delete from Firestore
-      await deleteDoc(doc(db, 'users', user.id));
-      
+      // Soft Delete: Mark as inactive instead of deleting the document
+      await updateDoc(doc(db, 'users', user.id), { isActive: false });
       onSaved();
       onClose();
     } catch (e) {
-      setError(e.message);
+      console.error(e);
+    } finally {
       setDeleting(false);
     }
   };
 
-  const isConfirmed = confirmText === user.email;
-
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-box" style={{ borderTop: '4px solid var(--status-error)' }}>
-        <h2 className="modal-title" style={{ color: 'var(--status-error)' }}>Delete User Permanently</h2>
-        
+      <div className="modal-box">
+        <h2 className="modal-title" style={{ color: 'var(--status-error)' }}>Delete User</h2>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
-          You are about to permanently delete the profile and login credentials for <strong>{user.fullName}</strong>. 
-          This action <strong>cannot be undone</strong>.
+          <p>Are you absolutely sure you want to delete <strong>{user.fullName}</strong>?</p>
+          <p style={{ marginTop: 8, padding: 10, background: 'rgba(253,180,42,0.1)', borderRadius: 8, color: 'var(--brand-primary)' }}>
+            <strong>Note:</strong> This will remove the user from the active portal, but their profile records will remain safely saved in the database.
+          </p>
         </div>
 
-        {error && (
-          <div style={{
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-            borderRadius: 10, padding: '10px 14px', fontSize: 13,
-            color: 'var(--status-error)', marginBottom: 16,
-          }}>
-            {error}
-          </div>
-        )}
-
         <div className="form-group">
-          <label className="form-label">
-            Please type <strong>{user.email}</strong> to confirm.
-          </label>
-          <input 
-            className="portal-input" 
-            value={confirmText}
-            onChange={e => setConfirmText(e.target.value)}
-            onPaste={e => e.preventDefault()} // Prevent pasting to enforce typing
-            autoComplete="off"
-          />
+          <label className="form-label">Please type <strong>{user.fullName}</strong> to confirm.</label>
+          <input className="portal-input" value={confirmName}
+            onChange={e => setConfirmName(e.target.value)} />
         </div>
 
         <div className="modal-footer">
@@ -340,10 +314,9 @@ function DeleteUserModal({ user, onClose, onSaved }) {
           <button 
             className="btn btn-danger" 
             onClick={handleDelete} 
-            disabled={!isConfirmed || deleting}
-            style={{ opacity: isConfirmed ? 1 : 0.5 }}
+            disabled={deleting || confirmName !== user.fullName}
           >
-            {deleting ? <><span className="spinner" /> Deleting…</> : 'Delete Permanently'}
+            {deleting ? <><span className="spinner" /> Deleting…</> : 'I understand, delete user'}
           </button>
         </div>
       </div>
@@ -358,9 +331,9 @@ export default function Users() {
   const [loading, setLoading]     = useState(true);
   const [showAdd, setShowAdd]     = useState(false);
   const [editUser, setEditUser]   = useState(null);
-  const [deleteUser, setDeleteUser] = useState(null);
   const [search, setSearch]       = useState('');
   const [filterRole, setFilter]   = useState('all');
+  const [deleteUser, setDeleteUser] = useState(null);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -371,15 +344,9 @@ export default function Users() {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  const handleDelete = async (uid, name) => {
-    if (!window.confirm(`Delete "${name}"? This removes their portal profile. They can still be deleted from Firebase Auth separately.`)) return;
-    setDeleting(uid);
-    await deleteDoc(doc(db, 'users', uid));
-    setUsers(prev => prev.filter(u => u.id !== uid));
-    setDeleting(null);
-  };
-
   const filtered = users.filter(u => {
+    if (u.isActive === false) return false; // Filter out soft-deleted users
+    
     const q = search.toLowerCase();
     const matchSearch = !q || u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
     const matchRole   = filterRole === 'all' || u.role === filterRole;
