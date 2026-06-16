@@ -5,10 +5,14 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const ROLES = ['admin', 'teacher', 'student'];
+const ROLES = ['admin', 'branch_manager', 'service_manager', 'frontend_desk_manager'];
+
+const formatRole = (role) => {
+  return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'student', password: '' });
+  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'service_manager', password: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -134,7 +138,7 @@ function AddUserModal({ onClose, onSaved }) {
               onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
             >
               {ROLES.map(r => (
-                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                <option key={r} value={r}>{formatRole(r)}</option>
               ))}
             </select>
           </div>
@@ -156,7 +160,7 @@ function EditUserModal({ user, onClose, onSaved }) {
     fullName: user.fullName || '', 
     email: user.email || '', 
     mobile: user.mobile || '', 
-    role: user.role || 'student', 
+    role: user.role || 'service_manager', 
     password: '' 
   });
   const [saving, setSaving] = useState(false);
@@ -257,7 +261,7 @@ function EditUserModal({ user, onClose, onSaved }) {
             <select className="portal-select" value={form.role}
               onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
               {ROLES.map(r => (
-                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                <option key={r} value={r}>{formatRole(r)}</option>
               ))}
             </select>
           </div>
@@ -324,7 +328,12 @@ function DeleteUserModal({ user, onClose, onSaved }) {
   );
 }
 
-const ROLE_BADGE = { admin: 'badge-admin', teacher: 'badge-teacher', student: 'badge-student' };
+const ROLE_BADGE = { 
+  admin: 'badge-admin', 
+  branch_manager: 'badge-branch-manager', 
+  service_manager: 'badge-service-manager', 
+  frontend_desk_manager: 'badge-frontend-desk' 
+};
 
 export default function Users() {
   const [users, setUsers]         = useState([]);
@@ -362,7 +371,7 @@ export default function Users() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Users</h1>
-          <p className="page-subtitle">Manage all admins, teachers, and students</p>
+          <p className="page-subtitle">Manage Branch Managers, Service Managers, and Frontend Desk Managers</p>
         </div>
         <button className="btn btn-brand" onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
@@ -383,7 +392,7 @@ export default function Users() {
           value={filterRole} onChange={e => setFilter(e.target.value)}>
           <option value="all">All Roles</option>
           {ROLES.map(r => (
-            <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+            <option key={r} value={r}>{formatRole(r)}</option>
           ))}
         </select>
       </div>
@@ -426,7 +435,7 @@ export default function Users() {
                     </div>
                   </td>
                   <td>{u.email}</td>
-                  <td><span className={`badge ${ROLE_BADGE[u.role] ?? 'badge-student'}`}>{u.role}</span></td>
+                  <td><span className={`badge ${ROLE_BADGE[u.role] ?? 'badge-service-manager'}`}>{formatRole(u.role)}</span></td>
                   <td>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
                       {u.id.slice(0, 12)}…

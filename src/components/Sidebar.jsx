@@ -3,6 +3,18 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
 
+const ROLE_BADGE = { 
+  admin: 'badge-admin', 
+  branch_manager: 'badge-branch-manager', 
+  service_manager: 'badge-service-manager', 
+  frontend_desk_manager: 'badge-frontend-desk' 
+};
+
+const formatRole = (role) => {
+  if (!role) return 'Unknown';
+  return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
 const adminNav = [
   { to: '/dashboard',        icon: 'dashboard',      label: 'Dashboard' },
   { to: '/users',            icon: 'group',          label: 'Users' },
@@ -35,11 +47,11 @@ export default function Sidebar() {
 
       {/* Role badge */}
       <div className="sidebar-role-wrap">
-        <span className={`badge badge-${profile?.role ?? 'admin'}`}>
+        <span className={`badge ${ROLE_BADGE[profile?.role] ?? 'badge-service-manager'}`}>
           <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
-            {profile?.role === 'admin' ? 'shield' : profile?.role === 'teacher' ? 'school' : 'person'}
+            {profile?.role === 'admin' || profile?.role === 'branch_manager' ? 'shield' : profile?.role === 'service_manager' ? 'support_agent' : 'front_desk'}
           </span>
-          {profile?.role ?? 'Admin'}
+          {formatRole(profile?.role ?? 'admin')}
         </span>
       </div>
 

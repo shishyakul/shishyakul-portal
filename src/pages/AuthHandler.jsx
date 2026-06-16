@@ -45,10 +45,8 @@ export default function AuthHandler() {
 
         const data = userSnap.exists() ? userSnap.data() : { role: 'admin' };
 
-        // Route by role
-        if (data.role === 'admin')   navigate('/dashboard', { replace: true });
-        else if (data.role === 'teacher') navigate('/dashboard', { replace: true });
-        else navigate('/dashboard', { replace: true });
+        // Route to dashboard (Dashboard.jsx will handle role-based rendering)
+        navigate('/dashboard', { replace: true });
 
       } catch (err) {
         console.error('Auth error:', err);
