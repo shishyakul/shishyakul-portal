@@ -6,7 +6,8 @@ const ROLE_COLORS = {
   admin: 'badge-admin',
   branch_manager: 'badge-branch-manager',
   service_manager: 'badge-service-manager',
-  frontend_desk_manager: 'badge-frontend-desk'
+  frontend_desk_manager: 'badge-frontend-desk',
+  inventory_manager: 'badge-inventory-manager'
 };
 
 const formatRole = (role) => {
@@ -15,7 +16,7 @@ const formatRole = (role) => {
 };
 
 export default function AdminDashboard({ profile }) {
-  const [stats, setStats] = useState({ admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, total: 0 });
+  const [stats, setStats] = useState({ admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, inventoryManagers: 0, total: 0 });
   const [recentUsers, setRecentUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,10 +34,11 @@ export default function AdminDashboard({ profile }) {
               if (u.role === 'branch_manager') acc.branchManagers++;
               if (u.role === 'service_manager') acc.serviceManagers++;
               if (u.role === 'frontend_desk_manager') acc.frontendDesk++;
+              if (u.role === 'inventory_manager') acc.inventoryManagers++;
             }
             return acc;
           },
-          { admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, total: 0 }
+          { admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, inventoryManagers: 0, total: 0 }
         );
 
         setStats(counts);
@@ -90,6 +92,13 @@ export default function AdminDashboard({ profile }) {
       color: 'rgba(34,197,94,0.12)',
       iconColor: '#4ade80',
     },
+    {
+      label: 'Inventory',
+      value: stats.inventoryManagers,
+      icon: 'inventory_2',
+      color: 'rgba(20,184,166,0.12)',
+      iconColor: '#14b8a6',
+    },
   ];
 
   return (
@@ -127,7 +136,7 @@ export default function AdminDashboard({ profile }) {
           ))}
         </div>
       ) : (
-        <div className="grid-4" style={{ marginBottom: 28 }}>
+        <div className="grid-5" style={{ marginBottom: 28 }}>
           {statCards.map(({ label, value, icon, color, iconColor }) => (
             <div className="stat-card" key={label}>
               <div className="stat-icon" style={{ background: color }}>

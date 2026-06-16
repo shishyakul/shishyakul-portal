@@ -7,7 +7,8 @@ const ROLE_BADGE = {
   admin: 'badge-admin', 
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
-  frontend_desk_manager: 'badge-frontend-desk' 
+  frontend_desk_manager: 'badge-frontend-desk',
+  inventory_manager: 'badge-inventory-manager'
 };
 
 const formatRole = (role) => {
@@ -49,7 +50,7 @@ export default function Sidebar() {
       <div className="sidebar-role-wrap">
         <span className={`badge ${ROLE_BADGE[profile?.role] ?? 'badge-service-manager'}`}>
           <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
-            {profile?.role === 'admin' || profile?.role === 'branch_manager' ? 'shield' : profile?.role === 'service_manager' ? 'support_agent' : 'front_desk'}
+            {profile?.role === 'admin' || profile?.role === 'branch_manager' ? 'shield' : profile?.role === 'service_manager' ? 'support_agent' : profile?.role === 'inventory_manager' ? 'inventory_2' : 'front_desk'}
           </span>
           {formatRole(profile?.role ?? 'admin')}
         </span>

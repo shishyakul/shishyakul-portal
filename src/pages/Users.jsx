@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const ROLES = ['admin', 'branch_manager', 'service_manager', 'frontend_desk_manager'];
+const ROLES = ['admin', 'branch_manager', 'service_manager', 'frontend_desk_manager', 'inventory_manager'];
 
 const formatRole = (role) => {
   return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -332,7 +332,8 @@ const ROLE_BADGE = {
   admin: 'badge-admin', 
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
-  frontend_desk_manager: 'badge-frontend-desk' 
+  frontend_desk_manager: 'badge-frontend-desk',
+  inventory_manager: 'badge-inventory-manager'
 };
 
 export default function Users() {
