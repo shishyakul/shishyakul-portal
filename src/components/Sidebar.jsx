@@ -1,4 +1,4 @@
-// Portal Sidebar — navigation for admin dashboard
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
@@ -7,7 +7,7 @@ const ROLE_BADGE = {
   admin: 'badge-admin', 
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
-  frontend_desk_manager: 'badge-frontend-desk',
+  front_desk_manager: 'badge-front-desk',
   inventory_manager: 'badge-inventory-manager'
 };
 
@@ -16,20 +16,77 @@ const formatRole = (role) => {
   return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-const adminNav = [
-  { to: '/dashboard',        icon: 'dashboard',      label: 'Dashboard' },
-  { to: '/users',            icon: 'group',          label: 'Users' },
-  { to: '/announcements',    icon: 'campaign',       label: 'Announcements' },
-  { to: '/attendance',       icon: 'event_available',label: 'Attendance' },
-  { to: '/assignments',      icon: 'assignment',     label: 'Assignments' },
-  { to: '/fees',             icon: 'payments',       label: 'Fees' },
-];
+const NAV_CONFIG = {
+  admin: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/enquiries',   icon: 'person_add',      label: 'Enquiries' },
+    { to: '/pending-admissions', icon: 'assignment_ind', label: 'Pending Admissions' },
+    { to: '/admissions',  icon: 'how_to_reg',      label: 'Admissions' },
+    { to: '/demo-dashboard', icon: 'table_chart',  label: 'Demo Dashboard' },
+    { to: '/batches',     icon: 'view_kanban',     label: 'Batch Allocation' },
+    { to: '/fees',        icon: 'payments',        label: 'Fees Ledger' },
+    { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
+    { to: '/analytics',   icon: 'insights',        label: 'Analytics' },
+    { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/users',       icon: 'group',           label: 'Users' },
+  ],
+  branch_manager: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/analytics',   icon: 'insights',        label: 'Branch Analytics' },
+    { to: '/enquiries',   icon: 'person_add',      label: 'Enquiries' },
+    { to: '/admissions',  icon: 'how_to_reg',      label: 'Admissions' },
+    { to: '/demo-dashboard', icon: 'table_chart',  label: 'Demo Dashboard' },
+    { to: '/batches',     icon: 'view_kanban',     label: 'Batch Allocation' },
+    { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
+  ],
+  service_manager: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/faculty',     icon: 'school',          label: 'Faculty Hub' },
+    { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
+  ],
+  front_desk_manager: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/enquiries',   icon: 'person_add',      label: 'Walk-in Enquiries' },
+    { to: '/pending-admissions', icon: 'assignment_ind', label: 'Pending Admissions' },
+    { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/attendance',  icon: 'event_available', label: 'Daily Attendance' },
+    { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+  ],
+  inventory_manager: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+  ]
+};
 
 export default function Sidebar() {
-  const { profile, logout } = useAuth();
+  const { profile, logout, switchTestUser } = useAuth();
   const location = useLocation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const navItems = adminNav; // Will expand for teacher/student later
+  useEffect(() => {
+    if (isCollapsed) {
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
+    }
+  }, [isCollapsed]);
+
+  const handleTestRoleChange = (e) => {
+    const roles = {
+      admin: { role: 'admin', email: 'coreadmin@shishyakul.in', name: 'Vaishali Mam' },
+      branch_manager: { role: 'branch_manager', email: 'branch@shishyakul.in', name: 'Sumit Sir' },
+      service_manager: { role: 'service_manager', email: 'service@shishyakul.in', name: 'Rohan Sir' },
+      front_desk_manager: { role: 'front_desk_manager', email: 'frontdesk@shishyakul.in', name: 'Shruti Kamble' },
+      inventory_manager: { role: 'inventory_manager', email: 'inventory@shishyakul.in', name: 'Rupali More' }
+    };
+    if (roles[e.target.value] && switchTestUser) {
+      switchTestUser(roles[e.target.value]);
+    }
+  };
+
+  const navItems = NAV_CONFIG[profile?.role] || NAV_CONFIG.front_desk_manager;
 
   return (
     <aside className="sidebar">
@@ -44,13 +101,18 @@ export default function Sidebar() {
           <span className="sidebar-brand-name">Shishyakul</span>
           <span className="sidebar-brand-sub">Admin Portal</span>
         </div>
+        <button className="sidebar-collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
+          <span className="material-symbols-outlined">
+            {isCollapsed ? 'chevron_right' : 'chevron_left'}
+          </span>
+        </button>
       </div>
 
       {/* Role badge */}
       <div className="sidebar-role-wrap">
         <span className={`badge ${ROLE_BADGE[profile?.role] ?? 'badge-service-manager'}`}>
-          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
-            {profile?.role === 'admin' || profile?.role === 'branch_manager' ? 'shield' : profile?.role === 'service_manager' ? 'support_agent' : profile?.role === 'inventory_manager' ? 'inventory_2' : 'front_desk'}
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+            {profile?.role === 'admin' || profile?.role === 'branch_manager' ? 'shield' : profile?.role === 'service_manager' ? 'support_agent' : profile?.role === 'inventory_manager' ? 'inventory_2' : 'storefront'}
           </span>
           {formatRole(profile?.role ?? 'admin')}
         </span>
@@ -87,6 +149,24 @@ export default function Sidebar() {
           <span className="material-symbols-outlined">logout</span>
         </button>
       </div>
+
+      {/* DEV ONLY ROLE SWITCHER */}
+      {window.location.hostname === 'localhost' && (
+        <div style={{ padding: '12px', borderTop: '1px solid var(--surface-border)' }}>
+          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Local Test Switcher:</p>
+          <select 
+            value={profile?.role || 'front_desk_manager'} 
+            onChange={handleTestRoleChange}
+            style={{ width: '100%', padding: '6px', borderRadius: '6px', fontSize: '12px', background: 'var(--surface-bg)', color: 'var(--text-primary)', border: '1px solid var(--brand-primary)' }}
+          >
+            <option value="front_desk_manager">Front Desk (Shruti)</option>
+            <option value="admin">System Admin (Vaishali)</option>
+            <option value="branch_manager">Branch Manager (Sumit)</option>
+            <option value="service_manager">Service Manager (Rohan)</option>
+            <option value="inventory_manager">Inventory (Rupali)</option>
+          </select>
+        </div>
+      )}
     </aside>
   );
 }

@@ -1,0 +1,394 @@
+.kanban-container {
+  padding: 32px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kanban-header {
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.kanban-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.kanban-header p {
+  color: var(--text-secondary);
+}
+
+.kanban-board {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+  overflow-x: auto;
+  padding-bottom: 24px;
+}
+
+.kanban-column {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  min-width: 300px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kanban-col-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--surface-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-card);
+}
+
+.col-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 13px;
+}
+
+.col-count {
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.kanban-droppable {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kanban-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: grab;
+  transition: box-shadow 0.2s, transform 0.1s;
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.kanban-card:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.card-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.card-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-icon {
+  font-size: 14px;
+  color: var(--brand-primary);
+}
+
+/* Modal styles for Admission */
+.admission-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.admission-modal {
+  background: var(--surface-card);
+  padding: 32px;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+}
+
+.admission-modal.multistep {
+  max-width: 800px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.admission-modal h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.admission-modal p {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.modal-form-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.modal-form-group input, .modal-form-group select, .modal-form-group textarea {
+  padding: 12px 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.modal-form-group input:focus, .modal-form-group select:focus, .modal-form-group textarea:focus {
+  border-color: var(--brand-primary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+/* Multi-step Form Tracker */
+.step-tracker {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: 20px;
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface-bg);
+  border: 2px solid var(--surface-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--text-secondary);
+  position: relative;
+  font-size: 14px;
+}
+
+.step-circle.active {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary-dark);
+  background: rgba(253, 180, 42, 0.1);
+  box-shadow: 0 0 0 4px rgba(253, 180, 42, 0.15);
+}
+
+.step-circle.completed {
+  border-color: var(--status-success);
+  background: var(--status-success);
+  color: white;
+}
+
+.step-indicator {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface-bg);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--surface-border);
+  display: inline-block;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  border-left: 3px solid var(--brand-primary);
+  padding-left: 10px;
+}
+
+.form-grid-modal {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 600px) {
+  .form-grid-modal {
+    grid-template-columns: 1fr;
+  }
+}
+
+.calculated-total-pane {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+}
+
+.total-calculation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.total-calculation-row strong {
+  font-size: 22px;
+  color: var(--brand-primary-dark);
+}
+
+/* Call Notes history log styles */
+.notes-history {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--surface-bg);
+  margin-bottom: 20px;
+}
+
+.log-item {
+  border-bottom: 1px solid var(--surface-border);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.log-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.log-item-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.log-item-text {
+  font-size: 13.5px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Dynamic grid tables for siblings/references */
+.dynamic-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.dynamic-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--surface-bg);
+}
+
+.dynamic-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.table-input {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+}
+
+/* Card Action notes call buttons */
+.card-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-card-action {
+  background: rgba(253, 180, 42, 0.1);
+  color: var(--brand-primary-dark);
+  border: 1px solid rgba(253, 180, 42, 0.2);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-card-action:hover {
+  background: var(--brand-primary);
+  color: white;
+}
+

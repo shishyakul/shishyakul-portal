@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const ROLE_COLORS = {
   admin: 'badge-admin',
   branch_manager: 'badge-branch-manager',
   service_manager: 'badge-service-manager',
-  frontend_desk_manager: 'badge-frontend-desk',
+  front_desk_manager: 'badge-front-desk',
   inventory_manager: 'badge-inventory-manager'
 };
 
@@ -16,90 +17,119 @@ const formatRole = (role) => {
 };
 
 export default function AdminDashboard({ profile }) {
-  const [stats, setStats] = useState({ admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, inventoryManagers: 0, total: 0 });
-  const [recentUsers, setRecentUsers] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchUsers() {
       try {
         const snap = await getDocs(collection(db, 'users'));
-        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        const counts = users.reduce(
-          (acc, u) => {
-            if (u.isActive !== false) {
-              acc.total++;
-              if (u.role === 'admin') acc.admins++;
-              if (u.role === 'branch_manager') acc.branchManagers++;
-              if (u.role === 'service_manager') acc.serviceManagers++;
-              if (u.role === 'frontend_desk_manager') acc.frontendDesk++;
-              if (u.role === 'inventory_manager') acc.inventoryManagers++;
-            }
-            return acc;
-          },
-          { admins: 0, branchManagers: 0, serviceManagers: 0, frontendDesk: 0, inventoryManagers: 0, total: 0 }
-        );
-
-        setStats(counts);
-        setRecentUsers(users.filter(u => u.isActive !== false).slice(0, 5));
+        setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (e) {
-        console.error('Dashboard fetch error:', e);
+        console.error('Fetch users error:', e);
       } finally {
         setLoading(false);
       }
     }
-    fetchData();
+    fetchUsers();
+
+    const q = query(collection(db, 'students'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const qAtt = query(collection(db, 'attendance'));
+    const unsubAtt = onSnapshot(qAtt, (snapshot) => {
+      setAttendanceLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => { unsub(); unsubAtt(); };
   }, []);
 
   const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const statCards = [
-    {
-      label: 'Total Users',
-      value: stats.total,
-      icon: 'group',
-      color: 'rgba(253,180,42,0.15)',
-      iconColor: '#fdb42a',
-    },
-    {
-      label: 'Admins',
-      value: stats.admins,
-      icon: 'shield',
-      color: 'rgba(253,180,42,0.1)',
-      iconColor: '#fdb42a',
-    },
-    {
-      label: 'Branch Managers',
-      value: stats.branchManagers,
-      icon: 'business',
-      color: 'rgba(168,85,247,0.12)',
-      iconColor: '#a855f7',
-    },
-    {
-      label: 'Service Managers',
-      value: stats.serviceManagers,
-      icon: 'support_agent',
-      color: 'rgba(59,130,246,0.12)',
-      iconColor: '#60a5fa',
-    },
-    {
-      label: 'Frontend Desk',
-      value: stats.frontendDesk,
-      icon: 'front_desk',
-      color: 'rgba(34,197,94,0.12)',
-      iconColor: '#4ade80',
-    },
-    {
-      label: 'Inventory',
-      value: stats.inventoryManagers,
-      icon: 'inventory_2',
-      color: 'rgba(20,184,166,0.12)',
-      iconColor: '#14b8a6',
-    },
+  // Compute Metrics
+  const activeUsers = users.filter(u => u.isActive !== false);
+  const recentUsers = activeUsers.slice(0, 5);
+
+  let totalExpected = 0;
+  let totalCollected = 0;
+  let funnel = { enquiry: 0, demo: 0, admitted: 0, dropped: 0 };
+
+  students.forEach(s => {
+    // Funnel
+    const status = s.status || 'enquiry';
+    if (status === 'enquiry') funnel.enquiry++;
+    else if (status === 'demo') funnel.demo++;
+    else if (status === 'admitted') funnel.admitted++;
+    else if (status === 'dropped') funnel.dropped++;
+
+    // Finances (Only for admitted)
+    if (status === 'admitted' && s.totalFees) {
+      totalExpected += s.totalFees;
+      const instCount = s.installments || 1;
+      const instAmount = s.totalFees / instCount;
+      const paidCount = (s.paidInstallments || []).length;
+      totalCollected += (instAmount * paidCount);
+    }
+  });
+
+  totalExpected = Math.round(totalExpected);
+  totalCollected = Math.round(totalCollected);
+  const totalPending = totalExpected - totalCollected;
+  const conversionRate = (funnel.enquiry + funnel.demo + funnel.admitted) > 0 
+    ? Math.round((funnel.admitted / (funnel.enquiry + funnel.demo + funnel.admitted + funnel.dropped)) * 100) 
+    : 0;
+
+  // Calculate attendance % for admitted students
+  const studentAttendanceStats = students.filter(s => s.status === 'admitted').map(student => {
+    const totalSessions = attendanceLogs.filter(log => log.batch === student.batch).length;
+    const absentSessions = attendanceLogs.filter(log => log.batch === student.batch && log.absenteeIds?.includes(student.id)).length;
+    const presentSessions = totalSessions - absentSessions;
+    const percentage = totalSessions === 0 ? 100 : Math.round((presentSessions / totalSessions) * 100);
+
+    return {
+      ...student,
+      percentage,
+      totalSessions,
+      absentSessions
+    };
+  }).sort((a, b) => a.percentage - b.percentage); // Lowest attendance first (Truancy risk)
+  
+  const truancyList = studentAttendanceStats.slice(0, 5);
+
+  // Chart Data
+  const revenueData = [
+    { name: 'Collected', value: totalCollected, color: '#4ade80' },
+    { name: 'Pending', value: totalPending, color: '#fdb42a' }
   ];
+
+  const funnelData = [
+    { name: 'Enquiry', count: funnel.enquiry, fill: '#60a5fa' },
+    { name: 'Demo', count: funnel.demo, fill: '#a855f7' },
+    { name: 'Admitted', count: funnel.admitted, fill: '#4ade80' },
+    { name: 'Dropped', count: funnel.dropped, fill: '#ef4444' }
+  ];
+
+  // Custom tooltip for charts
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ background: 'var(--surface-elevated)', border: '1px solid var(--surface-border)', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>{payload[0].name}</p>
+          <p style={{ margin: 0, fontSize: '14px', color: payload[0].payload.color || payload[0].payload.fill }}>
+            {payload[0].name === 'Collected' || payload[0].name === 'Pending' 
+              ? `₹${payload[0].value.toLocaleString()}` 
+              : payload[0].value}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div>
@@ -114,95 +144,162 @@ export default function AdminDashboard({ profile }) {
             👋
           </h1>
           <p className="page-subtitle">
-            Here's what's happening at Shishyakul today.
+            Shishyakul Global Branch Analytics & Overview.
           </p>
         </div>
       </div>
 
-      {/* Stat cards */}
-      {loading ? (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="stat-card"
-              style={{
-                flex: 1,
-                background: 'var(--surface-card)',
-                animation: 'pulse 1.5s ease-in-out infinite',
-                minHeight: 100,
-              }}
-            />
-          ))}
+      {/* Primary KPI Widgets */}
+      <div className="grid-4" style={{ marginBottom: 28 }}>
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(74, 222, 128, 0.12)' }}>
+            <span className="material-symbols-outlined filled" style={{ color: '#4ade80', fontSize: 22 }}>payments</span>
+          </div>
+          <div className="stat-label">Total Revenue Collected</div>
+          <div className="stat-value" style={{ color: '#4ade80' }}>₹{totalCollected.toLocaleString()}</div>
         </div>
-      ) : (
-        <div className="grid-5" style={{ marginBottom: 28 }}>
-          {statCards.map(({ label, value, icon, color, iconColor }) => (
-            <div className="stat-card" key={label}>
-              <div className="stat-icon" style={{ background: color }}>
-                <span
-                  className="material-symbols-outlined filled"
-                  style={{ color: iconColor, fontSize: 22 }}
-                >
-                  {icon}
-                </span>
-              </div>
-              <div className="stat-label">{label}</div>
-              <div className="stat-value">{value}</div>
-            </div>
-          ))}
+        
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(253, 180, 42, 0.12)' }}>
+            <span className="material-symbols-outlined filled" style={{ color: '#fdb42a', fontSize: 22 }}>pending_actions</span>
+          </div>
+          <div className="stat-label">Pending Dues</div>
+          <div className="stat-value" style={{ color: '#fdb42a' }}>₹{totalPending.toLocaleString()}</div>
         </div>
-      )}
 
-      {/* Two-column layout */}
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.12)' }}>
+            <span className="material-symbols-outlined filled" style={{ color: '#3b82f6', fontSize: 22 }}>groups</span>
+          </div>
+          <div className="stat-label">Total Students Admitted</div>
+          <div className="stat-value">{funnel.admitted}</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: 'rgba(168, 85, 247, 0.12)' }}>
+            <span className="material-symbols-outlined filled" style={{ color: '#a855f7', fontSize: 22 }}>trending_up</span>
+          </div>
+          <div className="stat-label">Enquiry Conversion Rate</div>
+          <div className="stat-value">{conversionRate}%</div>
+        </div>
+      </div>
+
+      {/* Visual Analytics Charts */}
+      <div className="grid-2" style={{ marginBottom: 28, alignItems: 'stretch' }}>
+        <div className="portal-card" style={{ height: '360px', display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+            Revenue Breakdown
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Expected Total: ₹{totalExpected.toLocaleString()}</p>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {totalExpected === 0 ? (
+              <div className="empty-state" style={{ height: '100%' }}>No financial data yet</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={revenueData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {revenueData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend verticalAlign="bottom" height={36}/>
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="portal-card" style={{ height: '360px', display: 'flex', flexDirection: 'column' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+            Admissions Pipeline
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Live tracker of the conversion funnel.</p>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {students.length === 0 ? (
+              <div className="empty-state" style={{ height: '100%' }}>No students in pipeline</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={funnelData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
+                  <YAxis hide />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--surface-bg)' }} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={60}>
+                    {funnelData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Lower Section: Staff & Actions */}
       <div className="grid-2" style={{ alignItems: 'start' }}>
-
-        {/* Recent Users */}
+        
+        {/* Attendance Truancy Risk */}
         <div className="portal-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700 }}>
-              Recent Users
+              Attendance Risk (Truancy)
             </h2>
-            <a
-              href="/users"
-              style={{ fontSize: 13, color: 'var(--brand-primary)', fontWeight: 600 }}
-            >
-              View all →
+            <a href="/attendance" style={{ fontSize: 13, color: 'var(--brand-primary)', fontWeight: 600 }}>
+              View logs →
             </a>
           </div>
 
           {loading ? (
+            <div className="empty-state"><div className="spinner" /></div>
+          ) : truancyList.length === 0 ? (
             <div className="empty-state">
-              <div className="spinner" />
-            </div>
-          ) : recentUsers.length === 0 ? (
-            <div className="empty-state">
-              <span className="material-symbols-outlined">group_off</span>
-              <p>No users yet. Add users from the Users section.</p>
+              <span className="material-symbols-outlined">how_to_reg</span>
+              <p>No admitted students or attendance data found.</p>
             </div>
           ) : (
             <table className="portal-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Role</th>
+                  <th>Student Name</th>
+                  <th>Batch</th>
+                  <th>Attendance %</th>
                 </tr>
               </thead>
               <tbody>
-                {recentUsers.map(u => (
-                  <tr key={u.id}>
+                {truancyList.map(s => (
+                  <tr key={s.id}>
                     <td>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
-                        {u.fullName || 'Unknown'}
+                        {s.studentName || 'Unknown'}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {u.email}
+                        {s.contactNo || s.fatherContact || 'No contact'}
                       </div>
                     </td>
                     <td>
-                      <span className={`badge ${ROLE_COLORS[u.role] ?? 'badge-service-manager'}`}>
-                        {formatRole(u.role)}
+                      <span className="badge badge-branch-manager">
+                        {s.batch || 'Pending'}
                       </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, color: s.percentage < 75 ? 'var(--status-error)' : 'var(--text-primary)' }}>
+                          {s.percentage}%
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          ({s.absentSessions} absent)
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -218,10 +315,10 @@ export default function AdminDashboard({ profile }) {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              { icon: 'person_add', label: 'Add New User',        sub: 'Create manager accounts', to: '/users' },
-              { icon: 'campaign',   label: 'New Announcement',    sub: 'Post a notice to all departments',        to: '/announcements' },
-              { icon: 'event_available', label: 'Record Attendance', sub: 'Mark staff attendance for today',     to: '/attendance' },
-              { icon: 'assignment', label: 'Create Task',   sub: 'Assign tasks to departments',   to: '/assignments' },
+              { icon: 'group_add', label: 'Enroll New Walk-in', sub: 'Add a new student enquiry', to: '/admissions' },
+              { icon: 'account_balance_wallet', label: 'Log Offline Payment', sub: 'Receive cash or check', to: '/fees' },
+              { icon: 'event_available', label: 'Mark Attendance', sub: 'Update absentee list', to: '/attendance' },
+              { icon: 'inventory_2', label: 'Check Stock', sub: 'View inventory ledger', to: '/inventory' },
             ].map(({ icon, label, sub, to }) => (
               <a
                 key={to}
@@ -265,13 +362,6 @@ export default function AdminDashboard({ profile }) {
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </div>
   );
 }

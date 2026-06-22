@@ -58,6 +58,11 @@ body {
   color: var(--text-primary);
   line-height: 1.6;
   overflow-x: hidden;
+  transition: --sidebar-width 0.3s ease;
+}
+
+body.sidebar-collapsed {
+  --sidebar-width: 80px;
 }
 a { text-decoration: none; color: inherit; }
 img { max-width: 100%; display: block; }
@@ -68,7 +73,7 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
   font-family: 'Material Symbols Outlined';
   font-weight: normal; font-style: normal;
   font-size: 24px; display: inline-block;
-  line-height: 1; text-transform: none;
+  line-height: 1; text-transform: none !important;
   letter-spacing: normal; word-wrap: normal;
   white-space: nowrap; direction: ltr;
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -88,20 +93,26 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 .portal-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
-  grid-template-rows: var(--topbar-height) 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ── Page Main Content Area ── */
 .portal-main {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1;
   padding: 28px 32px;
   overflow-y: auto;
-  min-height: calc(100vh - var(--topbar-height));
+  height: 100%;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
+  body {
+    --sidebar-width: 80px;
+  }
+}
+
+@media (max-width: 600px) {
   .portal-shell { grid-template-columns: 1fr; }
   .portal-main  { grid-column: 1; padding: 20px 16px; }
 }
@@ -192,8 +203,14 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 
 .btn-sm { padding: 7px 14px; font-size: 13px; }
 
-/* ── Table ── */
-.portal-table { width: 100%; border-collapse: collapse; }
+/* ── Table & Responsive Wrappers ── */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.portal-table { width: 100%; border-collapse: collapse; min-width: 700px; }
 .portal-table thead tr {
   border-bottom: 1px solid var(--surface-border);
 }
@@ -212,15 +229,15 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 
 /* ── Badge ── */
 .badge {
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 10px; border-radius: 999px;
   font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: uppercase; white-space: nowrap;
 }
 .badge-admin          { background: rgba(253,180,42,0.15); color: #fdb42a; }
 .badge-branch-manager { background: rgba(168,85,247,0.15); color: #a855f7; }
 .badge-service-manager{ background: rgba(59,130,246,0.15); color: #60a5fa; }
-.badge-frontend-desk  { background: rgba(34,197,94,0.15);  color: #4ade80; }
+.badge-front-desk  { background: rgba(34,197,94,0.15);  color: #4ade80; }
 .badge-inventory-manager{ background: rgba(20,184,166,0.15); color: #14b8a6; }
 .badge-success { background: rgba(34,197,94,0.15);  color: #4ade80; }
 .badge-warning { background: rgba(245,158,11,0.15); color: #fbbf24; }

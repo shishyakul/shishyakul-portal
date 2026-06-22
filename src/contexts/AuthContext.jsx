@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);  // true while checking auth state
 
   useEffect(() => {
+    // Real Firebase Auth listener
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -39,11 +40,18 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await signOut(auth);
-    window.location.href = 'https://shishyakul.in/login';
+    window.location.href = window.location.hostname === 'localhost'
+      ? 'http://localhost:5173/login'
+      : 'https://shishyakul.in/login';
+  };
+
+  const switchTestUser = (roleData) => {
+    setUser({ uid: `test-${roleData.role}`, email: roleData.email });
+    setProfile({ role: roleData.role, fullName: roleData.name });
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, logout, switchTestUser }}>
       {children}
     </AuthContext.Provider>
   );

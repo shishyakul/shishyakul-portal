@@ -6,7 +6,17 @@ import Sidebar from './components/Sidebar';
 import AuthHandler from './pages/AuthHandler';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
-import { Announcements, Attendance, Assignments, Fees } from './pages/Placeholders';
+import { Assignments, Analytics } from './pages/Placeholders';
+import Inventory from './pages/Inventory';
+import Faculty from './pages/Faculty';
+import EnquiryKiosk from './pages/EnquiryKiosk';
+import AttendanceGrid from './pages/AttendanceGrid';
+import Admissions from './pages/Admissions';
+import PendingAdmissions from './pages/PendingAdmissions';
+import Batches from './pages/Batches';
+import FeesLedger from './pages/FeesLedger';
+import DemoDashboard from './pages/DemoDashboard';
+import StudentsDirectory from './pages/StudentsDirectory';
 import './index.css';
 
 /* ── Layout wrapper for authenticated pages ── */
@@ -47,10 +57,34 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            <Route path="/announcements" element={
+            <Route path="/enquiries" element={
               <ProtectedRoute>
                 <PortalLayout>
-                  <Announcements />
+                  <EnquiryKiosk />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admissions" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <Admissions />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/pending-admissions" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <PendingAdmissions />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/demo-dashboard" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <DemoDashboard />
                 </PortalLayout>
               </ProtectedRoute>
             } />
@@ -58,23 +92,55 @@ export default function App() {
             <Route path="/attendance" element={
               <ProtectedRoute>
                 <PortalLayout>
-                  <Attendance />
-                </PortalLayout>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/assignments" element={
-              <ProtectedRoute>
-                <PortalLayout>
-                  <Assignments />
+                  <AttendanceGrid />
                 </PortalLayout>
               </ProtectedRoute>
             } />
 
             <Route path="/fees" element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <PortalLayout>
-                  <Fees />
+                  <FeesLedger />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/inventory" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <Inventory />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/faculty" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <Faculty />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <Analytics />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/batches" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <Batches />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/students" element={
+              <ProtectedRoute>
+                <PortalLayout>
+                  <StudentsDirectory />
                 </PortalLayout>
               </ProtectedRoute>
             } />

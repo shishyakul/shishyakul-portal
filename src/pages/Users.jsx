@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const ROLES = ['admin', 'branch_manager', 'service_manager', 'frontend_desk_manager', 'inventory_manager'];
+const ROLES = ['admin', 'branch_manager', 'service_manager', 'front_desk_manager', 'inventory_manager'];
 
 const formatRole = (role) => {
   return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -332,7 +332,7 @@ const ROLE_BADGE = {
   admin: 'badge-admin', 
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
-  frontend_desk_manager: 'badge-frontend-desk',
+  front_desk_manager: 'badge-front-desk',
   inventory_manager: 'badge-inventory-manager'
 };
 
@@ -408,6 +408,7 @@ export default function Users() {
             <p>{search || filterRole !== 'all' ? 'No users match your filter.' : 'No users yet. Click "Add User" to get started.'}</p>
           </div>
         ) : (
+        <div className="table-responsive">
           <table className="portal-table">
             <thead>
               <tr>
@@ -460,6 +461,7 @@ export default function Users() {
               ))}
             </tbody>
           </table>
+        </div>
         )}
       </div>
     </div>

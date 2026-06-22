@@ -1,0 +1,145 @@
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.demo-card {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.demo-card:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.demo-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.demo-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.demo-status-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.demo-status-badge.in_progress { background: #e0e7ff; color: #4338ca; }
+.demo-status-badge.completed { background: #fef08a; color: #854d0e; }
+.demo-status-badge.needs_followup { background: #fee2e2; color: #991b1b; }
+
+.demo-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px dashed var(--surface-border);
+  border-bottom: 1px dashed var(--surface-border);
+  padding: 16px 0;
+}
+
+.demo-day-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+}
+
+.demo-day-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.demo-day-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.demo-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-demo-action {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.1s;
+}
+
+.btn-demo-action.present {
+  background: rgba(34, 197, 94, 0.1);
+  color: #166534;
+}
+.btn-demo-action.present:hover, .btn-demo-action.present.active {
+  background: #22c55e;
+  color: #fff;
+}
+
+.btn-demo-action.absent {
+  background: rgba(239, 68, 68, 0.1);
+  color: #991b1b;
+}
+.btn-demo-action.absent:hover, .btn-demo-action.absent.active {
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-demo-action.schedule {
+  background: var(--surface-border);
+  color: var(--text-primary);
+}
+.btn-demo-action.schedule:hover {
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.demo-footer-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.demo-footer-actions button {
+  flex: 1;
+}
+
+/* Modal specific overrides */
+.enquiry-view-modal {
+  max-width: 1000px;
+  width: 95%;
+  max-height: 95vh;
+  overflow-y: auto;
+  position: relative;
+}

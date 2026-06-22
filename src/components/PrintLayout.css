@@ -1,0 +1,323 @@
+/* ── Premium Print Styles for Admission Form ── */
+@media screen {
+  /* Only show this component when printing */
+  .printable-admission-form {
+    display: none !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  /* Reset layout constraints for SPA printing */
+  html, body, #root, .portal-shell, .portal-main, .students-directory-container {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  .portal-shell > :not(.portal-main),
+  .students-directory-container > :not(.printable-admission-form) {
+    display: none !important;
+  }
+
+  .printable-admission-form {
+    display: block !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    background: white;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .paf-page {
+    width: 100%;
+    padding: 10mm;
+    box-sizing: border-box;
+    page-break-after: always;
+    page-break-inside: avoid;
+    position: relative;
+  }
+
+  /* Optimize print spooling speed by stripping heavy effects */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* Header */
+  .paf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #ea580c;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+
+  .paf-logo {
+    height: 60px;
+    object-fit: contain;
+  }
+
+  .paf-header-info {
+    text-align: right;
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.6;
+  }
+  .paf-header-info strong {
+    color: #111827;
+    font-size: 12px;
+  }
+
+  /* Title */
+  .paf-title {
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #111827;
+    margin-bottom: 16px;
+  }
+
+  /* Section */
+  .paf-section {
+    margin-bottom: 12px;
+  }
+
+  .paf-section-header {
+    background: #f9fafb;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #ea580c;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-left: 3px solid #ea580c;
+    margin-bottom: 12px;
+  }
+
+  /* Grid System */
+  .paf-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 24px;
+  }
+  
+  .paf-grid-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  /* Fields */
+  .paf-field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .paf-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .paf-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: #111827;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 2px;
+    min-height: 14px;
+    word-break: break-word;
+  }
+
+  /* Top Section layout with Photo */
+  .paf-top-row {
+    display: flex;
+    gap: 32px;
+  }
+  .paf-top-fields {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .paf-photo-box {
+    width: 35mm;
+    height: 45mm;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+  .paf-photo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .paf-photo-placeholder {
+    font-size: 9px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Tables */
+  .paf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 12px;
+  }
+  .paf-table th, .paf-table td {
+    border: 1px solid #e5e7eb;
+    padding: 10px 12px;
+    text-align: left;
+  }
+  .paf-table th {
+    background: #f9fafb;
+    font-weight: 700;
+    color: #4b5563;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+  .paf-table td {
+    font-weight: 500;
+  }
+
+  /* Checkboxes */
+  .paf-checkbox-group {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .paf-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .paf-box {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .paf-box.checked {
+    border-color: #ea580c;
+    /* Force print colors if possible */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .paf-box.checked::after {
+    content: '';
+    width: 4px;
+    height: 8px;
+    border: solid #ea580c;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    margin-top: -2px;
+  }
+
+  /* Signatures */
+  .paf-signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 32px;
+    margin-top: 64px;
+    page-break-inside: avoid;
+  }
+  .paf-sign-block {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 80px;
+  }
+  .paf-sign-img {
+    height: 50px;
+    object-fit: contain;
+    margin-bottom: 8px;
+  }
+  .paf-sign-line {
+    border-top: 1px dashed #9ca3af;
+    padding-top: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 100%;
+  }
+
+  /* Declarations */
+  .paf-declarations {
+    font-size: 10px;
+    line-height: 1.6;
+    color: #4b5563;
+    background: #f9fafb;
+    padding: 16px 20px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+  }
+  .paf-declarations ol {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+  }
+  .paf-declarations li {
+    margin-bottom: 6px;
+  }
+
+  /* Text Area mimicking */
+  .paf-textarea-value {
+    font-size: 11px;
+    font-weight: 500;
+    color: #111827;
+    line-height: 1.4;
+    padding: 8px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    min-height: 40px;
+  }
+
+  .paf-footer {
+    text-align: center;
+    font-size: 10px;
+    color: #9ca3af;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #f3f4f6;
+    page-break-inside: avoid;
+  }
+}

@@ -23,7 +23,7 @@ export default function Dashboard() {
       return <ServiceManagerDashboard profile={profile} />;
     case 'inventory_manager':
       return <InventoryDashboard profile={profile} />;
-    case 'frontend_desk_manager':
+    case 'front_desk_manager':
     default:
       return <FrontendDeskDashboard profile={profile} />;
   }

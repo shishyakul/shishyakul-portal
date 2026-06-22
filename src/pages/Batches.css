@@ -1,0 +1,226 @@
+.batches-container {
+  padding: 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.batches-header {
+  margin-bottom: 32px;
+}
+
+.batches-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.batches-header p {
+  color: var(--text-secondary);
+}
+
+/* Segmented Control Tabs */
+.batches-tabs {
+  display: flex;
+  background: var(--surface-bg);
+  padding: 6px;
+  border-radius: 12px;
+  width: fit-content;
+  margin-bottom: 32px;
+  border: 1px solid var(--surface-border);
+}
+
+.batch-tab {
+  padding: 10px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.batch-tab.active {
+  background: var(--brand-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(253, 180, 42, 0.3);
+}
+
+.batch-tab:hover:not(.active) {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-primary);
+}
+
+/* Grid Board Layout */
+.batches-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+/* Glassmorphism Column */
+.batch-column {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.02);
+  transition: border-color 0.2s;
+  height: 100%; /* Stretch to fill grid row */
+}
+
+.batch-col-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--surface-border);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.batch-col-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.batch-col-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.batch-col-count {
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+/* Capacity Meter */
+.batch-capacity-wrapper {
+  width: 100%;
+  height: 6px;
+  background: var(--surface-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.batch-capacity-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.capacity-safe { background: var(--status-success); }
+.capacity-warn { background: var(--status-warning); }
+.capacity-danger { background: var(--status-error); }
+
+/* Droppable Area */
+.batch-droppable {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(248, 250, 252, 0.4);
+}
+
+.batch-droppable::-webkit-scrollbar { width: 6px; }
+.batch-droppable::-webkit-scrollbar-track { background: transparent; }
+.batch-droppable::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.batch-droppable::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.batch-empty-state {
+  margin: auto;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.6;
+}
+
+/* Avatar Card */
+.batch-card {
+  background: #fff;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
+
+.batch-card:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  transform: translateY(-2px);
+}
+
+.batch-card:active {
+  cursor: grabbing;
+}
+
+.batch-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--surface-border);
+  background: var(--surface-bg);
+  flex-shrink: 0;
+}
+
+.batch-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.batch-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.batch-card-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-card-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Dragging Overlay Card */
+.batch-card-dragging {
+  cursor: grabbing !important;
+  transform: scale(1.05) rotate(2deg);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.15);
+  border-color: var(--brand-primary);
+  z-index: 9999;
+}
