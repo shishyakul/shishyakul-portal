@@ -8,7 +8,9 @@ const ROLE_BADGE = {
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
   front_desk_manager: 'badge-front-desk',
-  inventory_manager: 'badge-inventory-manager'
+  inventory_manager: 'badge-inventory-manager',
+  teacher: 'badge-teacher',
+  student: 'badge-student'
 };
 
 const formatRole = (role) => {
@@ -26,13 +28,11 @@ const NAV_CONFIG = {
     { to: '/batches',     icon: 'view_kanban',     label: 'Batch Allocation' },
     { to: '/fees',        icon: 'payments',        label: 'Fees Ledger' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
-    { to: '/analytics',   icon: 'insights',        label: 'Analytics' },
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/users',       icon: 'group',           label: 'Users' },
   ],
   branch_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
-    { to: '/analytics',   icon: 'insights',        label: 'Branch Analytics' },
     { to: '/enquiries',   icon: 'person_add',      label: 'Enquiries' },
     { to: '/admissions',  icon: 'how_to_reg',      label: 'Admissions' },
     { to: '/demo-dashboard', icon: 'table_chart',  label: 'Demo Dashboard' },
@@ -57,6 +57,19 @@ const NAV_CONFIG = {
   inventory_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+  ],
+  teacher: [
+    { to: '/dashboard#batches',   icon: 'groups',          label: 'My Batches' },
+    { to: '/dashboard#timetable', icon: 'dashboard',       label: 'My Timetable' },
+    { to: '/dashboard#materials', icon: 'auto_stories',    label: 'Course Materials' },
+    { to: '/dashboard#grading',   icon: 'grading',         label: 'Grading & Submissions' },
+  ],
+  student: [
+    { to: '/dashboard#feed',      icon: 'dashboard',       label: 'My Feed' },
+    { to: '/dashboard#submit',    icon: 'assignment',      label: 'Submit Work' },
+    { to: '/dashboard#timetable', icon: 'calendar_month',  label: 'Timetable' },
+    { to: '/dashboard#attendance',icon: 'event_available', label: 'Attendance' },
+    { to: '/dashboard#performance',icon: 'military_tech',  label: 'Performance' },
   ]
 };
 
@@ -79,7 +92,9 @@ export default function Sidebar() {
       branch_manager: { role: 'branch_manager', email: 'branch@shishyakul.in', name: 'Sumit Sir' },
       service_manager: { role: 'service_manager', email: 'service@shishyakul.in', name: 'Rohan Sir' },
       front_desk_manager: { role: 'front_desk_manager', email: 'frontdesk@shishyakul.in', name: 'Shruti Kamble' },
-      inventory_manager: { role: 'inventory_manager', email: 'inventory@shishyakul.in', name: 'Rupali More' }
+      inventory_manager: { role: 'inventory_manager', email: 'inventory@shishyakul.in', name: 'Rupali More' },
+      teacher: { role: 'teacher', email: 'teacher@shishyakul.in', name: 'Test Faculty' },
+      student: { role: 'student', email: 'student@shishyakul.in', name: 'Test Student' }
     };
     if (roles[e.target.value] && switchTestUser) {
       switchTestUser(roles[e.target.value]);
@@ -89,8 +104,20 @@ export default function Sidebar() {
   const navItems = NAV_CONFIG[profile?.role] || NAV_CONFIG.front_desk_manager;
 
   return (
-    <aside className="sidebar">
-      {/* Brand */}
+    <>
+      {/* Mobile Top Header (Visible only on phones) */}
+      <div className="mobile-top-header">
+        <div className="mobile-header-brand">
+          <img src="/favicon.png" alt="Shishyakul" className="mobile-header-logo" />
+          <span className="mobile-header-text">Shishyakul</span>
+        </div>
+        <button className="sidebar-logout-btn" onClick={logout} title="Logout">
+          <span className="material-symbols-outlined">logout</span>
+        </button>
+      </div>
+
+      <aside className="sidebar">
+        {/* Brand */}
       <div className="sidebar-brand">
         <img
           src="/favicon.png"
@@ -120,18 +147,34 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="sidebar-nav">
-        {navItems.map(({ to, icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'sidebar-link--active' : ''}`
-            }
-          >
-            <span className="material-symbols-outlined sidebar-link-icon">{icon}</span>
-            <span className="sidebar-link-label">{label}</span>
-          </NavLink>
-        ))}
+        {navItems.map(({ to, icon, label }) => {
+          const isHashLink = to.includes('#');
+          let isActive = false;
+          
+          if (isHashLink && location.pathname === '/dashboard') {
+             const targetHash = to.split('#')[1];
+             const currentHash = location.hash.replace('#', '');
+             
+             if (currentHash === targetHash) {
+               isActive = true;
+             } else if (!currentHash && (targetHash === 'batches' || targetHash === 'feed')) {
+               isActive = true;
+             }
+          } else {
+             isActive = location.pathname.startsWith(to);
+          }
+
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className={`sidebar-link ${isActive ? 'sidebar-link--active' : ''}`}
+            >
+              <span className="material-symbols-outlined sidebar-link-icon">{icon}</span>
+              <span className="sidebar-link-label">{label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User footer */}
@@ -164,9 +207,12 @@ export default function Sidebar() {
             <option value="branch_manager">Branch Manager (Sumit)</option>
             <option value="service_manager">Service Manager (Rohan)</option>
             <option value="inventory_manager">Inventory (Rupali)</option>
+            <option value="teacher">Teacher (Test)</option>
+            <option value="student">Student (Test)</option>
           </select>
         </div>
       )}
     </aside>
+    </>
   );
 }

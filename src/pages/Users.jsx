@@ -5,14 +5,14 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const ROLES = ['admin', 'branch_manager', 'service_manager', 'front_desk_manager', 'inventory_manager'];
+const ROLES = ['teacher'];
 
 const formatRole = (role) => {
   return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'service_manager', password: '' });
+  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'teacher', password: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -51,6 +51,7 @@ function AddUserModal({ onClose, onSaved }) {
         fullName:  form.fullName.trim(),
         mobile:    form.mobile.trim(),
         role:      form.role,
+        temporaryPassword: form.password,
         createdAt: serverTimestamp(),
       });
 
@@ -160,7 +161,7 @@ function EditUserModal({ user, onClose, onSaved }) {
     fullName: user.fullName || '', 
     email: user.email || '', 
     mobile: user.mobile || '', 
-    role: user.role || 'service_manager', 
+    role: user.role || 'teacher', 
     password: '' 
   });
   const [saving, setSaving] = useState(false);
@@ -333,7 +334,8 @@ const ROLE_BADGE = {
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
   front_desk_manager: 'badge-front-desk',
-  inventory_manager: 'badge-inventory-manager'
+  inventory_manager: 'badge-inventory-manager',
+  teacher: 'badge-brand'
 };
 
 export default function Users() {
@@ -347,7 +349,10 @@ export default function Users() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const snap = await getDocs(collection(db, 'users'));
+    // Fetch only teachers and limit to 50 for scale (Core team is hidden)
+    const { query, where, limit } = await import('firebase/firestore');
+    const q = query(collection(db, 'users'), where('role', '==', 'teacher'), limit(50));
+    const snap = await getDocs(q);
     setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     setLoading(false);
   };
@@ -371,12 +376,12 @@ export default function Users() {
 
       <div className="page-header">
         <div>
-          <h1 className="page-title">Users</h1>
-          <p className="page-subtitle">Manage Branch Managers, Service Managers, and Frontend Desk Managers</p>
+          <h1 className="page-title">Teachers</h1>
+          <p className="page-subtitle">Manage Institute Teachers and generate temporary credentials</p>
         </div>
         <button className="btn btn-brand" onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
-          Add User
+          Add Teacher
         </button>
       </div>
 
@@ -415,6 +420,7 @@ export default function Users() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Credentials</th>
                 <th>UID</th>
                 <th>Actions</th>
               </tr>
@@ -438,6 +444,21 @@ export default function Users() {
                   </td>
                   <td>{u.email}</td>
                   <td><span className={`badge ${ROLE_BADGE[u.role] ?? 'badge-service-manager'}`}>{formatRole(u.role)}</span></td>
+                  <td>
+                    {u.temporaryPassword ? (
+                      <button 
+                        className="btn btn-ghost btn-sm" 
+                        onClick={() => navigator.clipboard.writeText(u.temporaryPassword)}
+                        style={{ fontSize: 11, color: 'var(--brand-primary)', background: 'rgba(253,180,42,0.1)' }}
+                        title="Copy password to clipboard"
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4 }}>content_copy</span>
+                        Copy Temp Password
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Securely Hashed</span>
+                    )}
+                  </td>
                   <td>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
                       {u.id.slice(0, 12)}…

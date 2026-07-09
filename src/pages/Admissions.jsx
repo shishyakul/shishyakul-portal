@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DndContext, closestCorners, DragOverlay, useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { collection, onSnapshot, doc, updateDoc, query, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, query, arrayUnion, limit } from 'firebase/firestore';
 import SignatureCanvas from 'react-signature-canvas';
 import { db } from '../firebase';
 import './Admissions.css';
@@ -20,124 +17,12 @@ const BATCH_DEF = {
   '10th': ['10th-CBSE Alpha', '10th-CBSE Bravo', '10th-CBSE Charlie', '10th-CBSE Delta', '10th-CBSE Echo', '10th-CBSE Foxtrot', '10th-State Hitman', '10th-State Golf']
 };
 
-/* --- Sortable Item Component --- */
-function SortableStudentCard({ student, onOpenNotes, onOpenPhase2 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: student.id, data: student });
-  
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const isEnquiryOrDemo = student.status === 'enquiry' || student.status === 'demo' || !student.status;
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="kanban-card">
-      <div className="card-header">
-        <span className="card-name">{student.studentName || 'Unknown'}</span>
-        <span className="card-date">{student.enquiryDate}</span>
-      </div>
-      <div className="card-details">
-        <div className="detail-row">
-          <span className="material-symbols-outlined detail-icon">call</span>
-          {student.contactNo || student.contactNumber || 'No Phone'}
-        </div>
-        <div className="detail-row">
-          <span className="material-symbols-outlined detail-icon">person</span>
-          {student.assignedCouncillor || 'Unassigned'}
-        </div>
-        {student.dropReason && (
-          <div className="detail-row" style={{ color: 'var(--status-error)', fontWeight: '600' }}>
-            <span className="material-symbols-outlined detail-icon" style={{ color: 'var(--status-error)' }}>cancel</span>
-            Reason: {student.dropReason}
-          </div>
-        )}
-      </div>
-
-      {isEnquiryOrDemo && (
-        <div className="card-actions" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-          {student.status === 'demo' && (
-            <div className="demo-tracker" style={{ display: 'flex', gap: '4px', marginRight: '8px' }}>
-              {[1, 2, 3].map(day => (
-                <button
-                  key={day}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const currentDays = student.demoDays || 0;
-                    const newDays = currentDays === day ? day - 1 : day;
-                    updateDoc(doc(db, 'students', student.id), { demoDays: newDays }).catch(err => console.error("Error updating demo days", err));
-                  }}
-                  style={{
-                    padding: '2px 6px',
-                    fontSize: '10px',
-                    borderRadius: '4px',
-                    border: '1px solid var(--surface-border)',
-                    background: (student.demoDays || 0) >= day ? 'var(--brand-primary)' : 'transparent',
-                    color: (student.demoDays || 0) >= day ? '#000' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontWeight: 700
-                  }}
-                  title={`Mark Demo Day ${day}`}
-                >
-                  D{day}
-                </button>
-              ))}
-            </div>
-          )}
-          <button 
-            className="btn-card-action"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenNotes(student);
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>note_add</span>
-            Call Notes ({student.callLogs?.length || 0})
-          </button>
-          {student.status === 'enquiry' && (
-            <button 
-              className="btn-card-action"
-              style={{ color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)', marginTop: '4px' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenPhase2(student);
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>admin_panel_settings</span>
-              Phase 2 Processing
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* --- Droppable Column Component --- */
-function KanbanColumn({ col, students, onOpenNotes, onOpenPhase2 }) {
-  const { setNodeRef } = useDroppable({ id: col.id });
-
-  return (
-    <div ref={setNodeRef} className="kanban-column">
-      <div className="kanban-col-header">
-        <span className="col-title">{col.title}</span>
-        <span className="col-count">{students.length}</span>
-      </div>
-      <div className="kanban-droppable">
-        <SortableContext items={students.map(s => s.id)} strategy={verticalListSortingStrategy}>
-          {students.map(student => (
-            <SortableStudentCard key={student.id} student={student} onOpenNotes={onOpenNotes} onOpenPhase2={onOpenPhase2} />
-          ))}
-        </SortableContext>
-      </div>
-    </div>
-  );
-}
+/* --- Component Start --- */
 
 export default function Admissions() {
   const [students, setStudents] = useState([]);
-  const [activeStudent, setActiveStudent] = useState(null);
+  const [activeTab, setActiveTab] = useState('enquiry');
+  const [selectedStudent, setSelectedStudent] = useState(null);
   
   // Call Notes Modal State
   const [showNotesModal, setShowNotesModal] = useState(false);
@@ -171,7 +56,7 @@ export default function Admissions() {
   const sigCanvasAdminRef = useRef(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'students'));
+    const q = query(collection(db, 'students'), limit(150));
     const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStudents(data);
@@ -179,47 +64,25 @@ export default function Admissions() {
     return () => unsub();
   }, []);
 
-  const handleDragStart = (event) => {
-    const { active } = event;
-    const student = students.find(s => s.id === active.id);
-    setActiveStudent(student);
-  };
-
-  const handleDragEnd = async (event) => {
-    setActiveStudent(null);
-    const { active, over } = event;
-    if (!over) return;
-
-    const studentId = active.id;
-    const currentStudent = students.find(s => s.id === studentId);
-    if (!currentStudent) return;
-
-    let targetStatus = over.id;
-    if (!COLUMNS.find(c => c.id === targetStatus)) {
-      const overStudent = students.find(s => s.id === over.id);
-      if (overStudent) targetStatus = overStudent.status;
+  const handleStatusChange = async (studentId, newStatus) => {
+    if (newStatus === 'dropped') {
+      setPendingDropId(studentId);
+      setDropReason('');
+      setCustomDropReason('');
+      setShowDropModal(true);
+      return;
     }
-
-    if (targetStatus && targetStatus !== currentStudent.status) {
-      if (targetStatus === 'admitted') {
-        try {
-          await updateDoc(doc(db, 'students', studentId), { status: targetStatus });
-          alert("Student moved to Admitted list. The Front Desk can now complete their admission form.");
-        } catch (err) {
-          console.error("Error updating status:", err);
-        }
-      } else if (targetStatus === 'dropped') {
-        setPendingDropId(studentId);
-        setDropReason('');
-        setCustomDropReason('');
-        setShowDropModal(true);
-      } else {
-        try {
-          await updateDoc(doc(db, 'students', studentId), { status: targetStatus });
-        } catch (err) {
-          console.error("Error updating status:", err);
-        }
+    try {
+      const dbStatus = newStatus === 'admitted' ? 'pending_admission' : newStatus;
+      await updateDoc(doc(db, 'students', studentId), { status: dbStatus });
+      if (newStatus === 'admitted') {
+        alert("Student moved to Admitted list. The Front Desk can now complete their admission form.");
       }
+      // Re-fetch or update selected student locally if needed
+      setSelectedStudent(prev => prev && prev.id === studentId ? { ...prev, status: dbStatus } : prev);
+      setActiveTab(newStatus); // Switch tab to show them
+    } catch (err) {
+      console.error("Error updating status:", err);
     }
   };
 
@@ -295,6 +158,7 @@ export default function Admissions() {
 
       // Auto-Transition to Admission Form if Confirmed
       if (targetStatus === 'admitted') {
+        await updateDoc(doc(db, 'students', activePhase2Student.id), { status: 'pending_admission' });
         alert("Student marked as confirmed! The Front Desk can now complete their admission form.");
       }
     } catch (err) {
@@ -350,55 +214,178 @@ export default function Admissions() {
     return students.filter(s => s.status === 'demo' && s.standard === std && s.id !== activePhase2Student.id);
   };
 
-  return (
-    <div className="kanban-container">
-      <div className="kanban-header">
-        <h1>Admission Pipeline</h1>
-        <p>Drag and drop students to move them through the conversion funnel.</p>
-      </div>
+  const currentTabStudents = students.filter(s => {
+    if (activeTab === 'enquiry') return s.status === 'enquiry' || !s.status;
+    if (activeTab === 'admitted') return s.status === 'admitted' || s.status === 'pending_admission';
+    return s.status === activeTab;
+  });
 
-      <DndContext 
-        collisionDetection={closestCorners} 
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="kanban-board">
+  return (
+    <div className="crm-container">
+      <div className="crm-header">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+          <div>
+            <h1>Admission Pipeline</h1>
+            <p>Select a stage to view leads and manage conversions.</p>
+          </div>
+        </div>
+
+        <div className="crm-tabs">
           {COLUMNS.map(col => {
-            const colStudents = students.filter(s => s.status === col.id || (col.id === 'enquiry' && !s.status));
+            const count = students.filter(s => {
+              if (col.id === 'enquiry') return s.status === 'enquiry' || !s.status;
+              if (col.id === 'admitted') return s.status === 'admitted' || s.status === 'pending_admission';
+              return s.status === col.id;
+            }).length;
             return (
-              <div key={col.id} id={col.id}>
-                <KanbanColumn 
-                  col={col} 
-                  students={colStudents} 
-                  onOpenNotes={(student) => {
-                    setActiveNotesStudent(student);
-                    setShowNotesModal(true);
-                  }}
-                  onOpenPhase2={(student) => {
-                    setActivePhase2Student(student);
-                    setPhase2Form({
-                      courseFees: '', discount: '', payableFees: '', installments: '',
-                      confirmationChecked: false, enquiryOutcome: '', reasonForNotJoining: '',
-                      followUpDate: '', followUpOverview: '', followUpRemarks: '', confirmedRemark: '', demoTime: ''
-                    });
-                    setShowPhase2Modal(true);
-                  }}
-                />
-              </div>
+              <button 
+                key={col.id} 
+                className={`crm-tab ${activeTab === col.id ? 'active' : ''}`}
+                onClick={() => { setActiveTab(col.id); setSelectedStudent(null); }}
+              >
+                {col.title} <span className="tab-badge">{count}</span>
+              </button>
             );
           })}
         </div>
+      </div>
 
-        <DragOverlay>
-          {activeStudent ? (
-            <div className="kanban-card" style={{ cursor: 'grabbing', opacity: 0.8, background: 'var(--surface-bg)' }}>
-              <div className="card-header">
-                <span className="card-name">{activeStudent.studentName}</span>
+      <div className="crm-split-layout">
+        <div className="crm-list-panel">
+          {currentTabStudents.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px' }}>No students in this stage.</div>
+          ) : (
+            currentTabStudents.map(student => (
+              <div 
+                key={student.id} 
+                className={`crm-list-item ${selectedStudent?.id === student.id ? 'active' : ''}`}
+                onClick={() => setSelectedStudent(student)}
+              >
+                <div className="crm-list-item-header">
+                  <strong>{student.studentName || 'Unknown'}</strong>
+                  <span className="item-date">{student.enquiryDate || 'New'}</span>
+                </div>
+                <div className="crm-list-item-sub">
+                  <span>{student.assignedCouncillor || 'Unassigned'}</span>
+                  <span>{student.contactNo || student.contactNumber || 'No phone'}</span>
+                </div>
               </div>
+            ))
+          )}
+        </div>
+
+        <div className="crm-detail-panel">
+          {!selectedStudent ? (
+            <div className="empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Select a student from the list to view details and take action.
             </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+          ) : (
+            <div className="crm-detail-content">
+              <div className="detail-header-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <h2 style={{ fontSize: '24px', margin: '0 0 8px 0' }}>{selectedStudent.studentName}</h2>
+                    <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>call</span> {selectedStudent.contactNo || selectedStudent.contactNumber}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>person</span> {selectedStudent.assignedCouncillor || 'Unassigned'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="detail-actions" style={{ display: 'flex', gap: '8px', marginTop: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--surface-border)' }}>
+                  <button className="btn btn-ghost" onClick={() => { setActiveNotesStudent(selectedStudent); setShowNotesModal(true); }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>note_add</span> Call Logs ({selectedStudent.callLogs?.length || 0})
+                  </button>
+                  {(!selectedStudent.status || selectedStudent.status === 'enquiry') && (
+                    <button className="btn btn-brand" style={{ background: '#4caf50', borderColor: '#4caf50' }} onClick={() => { setActivePhase2Student(selectedStudent); setShowPhase2Modal(true); }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>admin_panel_settings</span> Phase 2 Form
+                    </button>
+                  )}
+                  
+                  {selectedStudent.status === 'demo' && (
+                    <button className="btn btn-brand" onClick={() => handleStatusChange(selectedStudent.id, 'admitted')}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>verified</span> Mark Admitted
+                    </button>
+                  )}
+
+                  {selectedStudent.status !== 'dropped' && selectedStudent.status !== 'admitted' && (
+                    <button className="btn btn-brand btn-danger" onClick={() => handleStatusChange(selectedStudent.id, 'dropped')}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>cancel</span> Drop Lead
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Extended Details */}
+              <div className="detail-body" style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {selectedStudent.status === 'demo' && (
+                  <div className="info-card">
+                    <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      Demo Session Status
+                    </h3>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                      {['day1', 'day2', 'day3'].map((dayKey, idx) => {
+                        const dayData = selectedStudent.demoSchedule?.[dayKey];
+                        const isPresent = dayData?.attendance === 'present';
+                        const isAbsent = dayData?.attendance === 'absent';
+                        
+                        let bgColor = 'var(--surface-bg)';
+                        let borderColor = 'var(--surface-border)';
+                        let color = 'var(--text-secondary)';
+
+                        if (isPresent) {
+                          bgColor = 'rgba(76, 175, 80, 0.1)';
+                          borderColor = '#4caf50';
+                          color = '#4caf50';
+                        } else if (isAbsent) {
+                          bgColor = 'rgba(244, 67, 54, 0.1)';
+                          borderColor = '#f44336';
+                          color = '#f44336';
+                        }
+
+                        return (
+                          <div
+                            key={dayKey}
+                            style={{
+                              padding: '8px 16px', borderRadius: '8px', border: `1px solid ${borderColor}`,
+                              background: bgColor, color: color,
+                              fontWeight: 600, fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1
+                            }}
+                          >
+                            <span>Day {idx + 1}</span>
+                            <span style={{ fontSize: '11px', marginTop: '4px', fontWeight: 'normal' }}>
+                              {dayData?.date ? dayData.date : 'Not Scheduled'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="info-card">
+                  <h3>Lead Information</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px', fontSize: '14px' }}>
+                    <div><strong style={{ color: 'var(--text-secondary)' }}>Enquiry Date:</strong><br />{selectedStudent.enquiryDate || 'N/A'}</div>
+                    <div><strong style={{ color: 'var(--text-secondary)' }}>Source:</strong><br />{selectedStudent.enquiryType || 'N/A'}</div>
+                    <div><strong style={{ color: 'var(--text-secondary)' }}>Standard:</strong><br />{selectedStudent.standard || 'N/A'}</div>
+                    <div><strong style={{ color: 'var(--text-secondary)' }}>School:</strong><br />{selectedStudent.schoolName || 'N/A'}</div>
+                    <div style={{ gridColumn: '1 / -1' }}><strong style={{ color: 'var(--text-secondary)' }}>Address:</strong><br />{selectedStudent.address || 'N/A'}</div>
+                  </div>
+                </div>
+
+                {selectedStudent.dropReason && (
+                  <div className="info-card" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <h3 style={{ color: 'var(--status-error)' }}>Drop Reason</h3>
+                    <p style={{ marginTop: '8px', fontWeight: 'bold' }}>{selectedStudent.dropReason}</p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 📞 Call Notes / Logs Modal */}
       {showNotesModal && activeNotesStudent && (

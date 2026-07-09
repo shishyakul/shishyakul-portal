@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import AuthHandler from './pages/AuthHandler';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
-import { Assignments, Analytics } from './pages/Placeholders';
+
 import Inventory from './pages/Inventory';
 import Faculty from './pages/Faculty';
 import EnquiryKiosk from './pages/EnquiryKiosk';
@@ -124,7 +124,7 @@ export default function App() {
             <Route path="/analytics" element={
               <ProtectedRoute>
                 <PortalLayout>
-                  <Analytics />
+                  <Dashboard />
                 </PortalLayout>
               </ProtectedRoute>
             } />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import './StudentsDirectory.css';
 import PrintableAdmissionForm from '../components/PrintableAdmissionForm';
@@ -18,6 +18,7 @@ export default function StudentsDirectory() {
   const [activeTab, setActiveTab] = useState('profile');
   const [leftWidth, setLeftWidth] = useState(350);
   const [isDragging, setIsDragging] = useState(false);
+  const [limitCount, setLimitCount] = useState(50);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function StudentsDirectory() {
   }, [isDragging]);
 
   useEffect(() => {
-    const q = query(collection(db, 'students'), where('status', '==', 'admitted'));
+    const q = query(collection(db, 'students'), where('status', '==', 'admitted'), limit(limitCount));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStudents(docs);
@@ -73,7 +74,7 @@ export default function StudentsDirectory() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [limitCount]);
 
   const batches = ['All Batches', ...Array.from(new Set(students.map(s => s.batch).filter(Boolean))).sort()];
   
@@ -141,6 +142,15 @@ export default function StudentsDirectory() {
                 </div>
               </div>
             ))
+          )}
+          {filteredStudents.length >= limitCount && (
+            <button 
+              className="btn btn-ghost" 
+              style={{ width: '100%', marginTop: 16, border: '1px dashed var(--surface-border)' }}
+              onClick={() => setLimitCount(prev => prev + 50)}
+            >
+              Load More Students
+            </button>
           )}
         </div>
       </div>

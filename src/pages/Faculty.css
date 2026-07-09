@@ -41,8 +41,7 @@
 
 .teacher-profile-card {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
   padding: 20px;
   background: var(--surface-card);
   border: 1px solid var(--surface-border);

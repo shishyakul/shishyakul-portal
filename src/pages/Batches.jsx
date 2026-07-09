@@ -8,7 +8,7 @@ import './Batches.css'; // Use new UI redesign
 
 const GRADE_TABS = ['8th', '9th', '10th'];
 
-const BATCH_DEF = {
+export const BATCH_DEF = {
   '8th': [
     { id: '8th-CBSE Alpha', title: '8th-CBSE Alpha' },
     { id: '8th-CBSE Bravo', title: '8th-CBSE Bravo' },

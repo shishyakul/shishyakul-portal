@@ -40,6 +40,10 @@ export default function AttendanceGrid() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isAlreadyMarked, setIsAlreadyMarked] = useState(false);
   const [existingAttendanceId, setExistingAttendanceId] = useState(null);
+  
+  // Late Student States
+  const [lateStudents, setLateStudents] = useState({});
+  const [lateModal, setLateModal] = useState({ isOpen: false, studentId: null, minutes: '', reason: '' });
 
   // Follow-up States
   const [followupDate, setFollowupDate] = useState(new Date().toISOString().split('T')[0]);
@@ -100,11 +104,13 @@ export default function AttendanceGrid() {
         setExistingAttendanceId(docSnap.id);
         const data = docSnap.data();
         setAbsentees(new Set(data.absenteeIds || []));
+        setLateStudents(data.lateStudents || {});
         if (data.inOutTimes) setInOutTimes(data.inOutTimes);
       } else {
         setIsAlreadyMarked(false);
         setExistingAttendanceId(null);
         setAbsentees(new Set());
+        setLateStudents({});
       }
     } catch (err) {
       console.error("Failed to check existing attendance", err);
@@ -218,15 +224,40 @@ export default function AttendanceGrid() {
   };
 
   const toggleAttendance = (studentId) => {
+    if (lateStudents[studentId]) {
+      // If currently Late -> Reset to Present
+      setLateStudents(prev => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+      return;
+    }
+
     setAbsentees(prev => {
       const next = new Set(prev);
       if (next.has(studentId)) {
-        next.delete(studentId);
+        // If currently Absent -> Open Late Modal
+        setLateModal({ isOpen: true, studentId, minutes: '', reason: '' });
       } else {
+        // If currently Present -> Mark Absent
         next.add(studentId);
       }
       return next;
     });
+  };
+
+  const handleSaveLate = () => {
+    const { studentId, minutes, reason } = lateModal;
+    if (!minutes || !reason) return alert('Please enter both minutes and reason.');
+
+    setLateStudents(prev => ({ ...prev, [studentId]: { minutes, reason } }));
+    setAbsentees(prev => {
+      const next = new Set(prev);
+      next.delete(studentId);
+      return next;
+    });
+    setLateModal({ isOpen: false, studentId: null, minutes: '', reason: '' });
   };
 
   const handleSubmit = async () => {
@@ -239,6 +270,7 @@ export default function AttendanceGrid() {
         totalStudents: students.length,
         absentCount: absentees.size,
         absenteeIds: Array.from(absentees),
+        lateStudents: lateStudents,
         inOutTimes: sessionType !== 'Regular' ? inOutTimes : null,
         timestamp: serverTimestamp()
       };
@@ -339,7 +371,7 @@ export default function AttendanceGrid() {
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn-ghost" onClick={() => setAbsentees(new Set())} style={{ height: '44px', padding: '0 24px', borderRadius: '8px', fontWeight: 600, border: '1px solid var(--surface-border)', background: 'var(--surface-bg)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <button className="btn-ghost" onClick={() => { setAbsentees(new Set()); setLateStudents({}); }} style={{ height: '44px', padding: '0 24px', borderRadius: '8px', fontWeight: 600, border: '1px solid var(--surface-border)', background: 'var(--surface-bg)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>done_all</span>
                   Mark All Present
                 </button>
@@ -363,14 +395,27 @@ export default function AttendanceGrid() {
             <div className="student-grid">
               {students.map(student => {
                 const isAbsent = absentees.has(student.id);
+                const isLate = !!lateStudents[student.id];
+                
+                let cardClass = '';
+                if (sessionType === 'Regular') {
+                  if (isAbsent) cardClass = 'absent';
+                  if (isLate) cardClass = 'late';
+                }
+
                 return (
                   <div 
                     key={student.id} 
-                    className={`student-card ${isAbsent && sessionType === 'Regular' ? 'absent' : ''}`}
+                    className={`student-card ${cardClass}`}
                     onClick={() => { if (sessionType === 'Regular') toggleAttendance(student.id); }}
-                    style={{ height: sessionType === 'Regular' ? 'auto' : '180px' }}
+                    style={{ 
+                      height: sessionType === 'Regular' ? 'auto' : '180px',
+                      background: isLate ? 'rgba(249, 115, 22, 0.05)' : undefined,
+                      borderColor: isLate ? '#f97316' : undefined
+                    }}
                   >
                     {isAbsent && sessionType === 'Regular' && <span className="absent-badge">Absent</span>}
+                    {isLate && sessionType === 'Regular' && <span className="absent-badge" style={{ background: '#f97316' }}>Late</span>}
                     <div className="student-avatar" style={{ overflow: 'hidden' }}>
                       {student.photoDataUrl ? (
                         <img src={student.photoDataUrl} alt={student.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -479,6 +524,59 @@ export default function AttendanceGrid() {
       )}
 
       {/* Success Modal Overlay */}
+      {lateModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setLateModal({ ...lateModal, isOpen: false })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', width: '100%', background: '#fff', padding: '24px', borderRadius: '12px', boxShadow: '0 12px 48px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Mark as Late</h2>
+              <button 
+                onClick={() => setLateModal({ ...lateModal, isOpen: false })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <div className="portal-form-group">
+              <label>Minutes Late</label>
+              <input 
+                type="number" 
+                className="portal-input" 
+                value={lateModal.minutes}
+                onChange={e => setLateModal({ ...lateModal, minutes: e.target.value })}
+                placeholder="e.g. 15"
+                autoFocus
+              />
+            </div>
+            <div className="portal-form-group" style={{ marginTop: '16px' }}>
+              <label>Reason</label>
+              <input 
+                type="text" 
+                className="portal-input" 
+                value={lateModal.reason}
+                onChange={e => setLateModal({ ...lateModal, reason: e.target.value })}
+                placeholder="e.g. Traffic, Bus Delayed"
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
+              <button 
+                onClick={() => setLateModal({ ...lateModal, isOpen: false })}
+                style={{ padding: '10px 20px', border: '1px solid var(--surface-border)', background: 'var(--surface-bg)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-primary)' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveLate} 
+                style={{ padding: '10px 20px', background: '#f97316', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Mark Late
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSuccess && (
         <div className="success-overlay">
           <div className="success-modal">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import './FeesLedger.css';
 
@@ -25,13 +25,13 @@ export default function FeesLedger() {
 
   useEffect(() => {
     // Listen to only admitted students
-    const q = query(collection(db, 'students'), where('status', '==', 'admitted'));
+    const q = query(collection(db, 'students'), where('status', '==', 'admitted'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAdmittedStudents(data);
     });
 
-    const dropQ = query(collection(db, 'students'), where('status', '==', 'dropped'));
+    const dropQ = query(collection(db, 'students'), where('status', '==', 'dropped'), limit(100));
     const unsubDrop = onSnapshot(dropQ, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDroppedStudents(data);

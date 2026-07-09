@@ -84,12 +84,35 @@ export default function AdminDashboard({ profile }) {
     ? Math.round((funnel.admitted / (funnel.enquiry + funnel.demo + funnel.admitted + funnel.dropped)) * 100) 
     : 0;
 
+  // Group attendance logs by batch and sort by date desc
+  const attendanceByBatch = {};
+  attendanceLogs.forEach(log => {
+    if (!attendanceByBatch[log.batch]) attendanceByBatch[log.batch] = [];
+    attendanceByBatch[log.batch].push(log);
+  });
+  Object.keys(attendanceByBatch).forEach(batch => {
+    attendanceByBatch[batch].sort((a, b) => new Date(b.date) - new Date(a.date));
+  });
+
+  const consecutiveAbsentees = [];
+
   // Calculate attendance % for admitted students
   const studentAttendanceStats = students.filter(s => s.status === 'admitted').map(student => {
-    const totalSessions = attendanceLogs.filter(log => log.batch === student.batch).length;
-    const absentSessions = attendanceLogs.filter(log => log.batch === student.batch && log.absenteeIds?.includes(student.id)).length;
+    const batchLogs = attendanceByBatch[student.batch] || [];
+    const totalSessions = batchLogs.length;
+    const absentSessions = batchLogs.filter(log => log.absenteeIds?.includes(student.id)).length;
     const presentSessions = totalSessions - absentSessions;
     const percentage = totalSessions === 0 ? 100 : Math.round((presentSessions / totalSessions) * 100);
+
+    // Check for 2 continuous absences in the latest 2 sessions
+    if (batchLogs.length >= 2) {
+      if (batchLogs[0].absenteeIds?.includes(student.id) && batchLogs[1].absenteeIds?.includes(student.id)) {
+        consecutiveAbsentees.push({
+          ...student,
+          lastAbsentDate: batchLogs[0].date
+        });
+      }
+    }
 
     return {
       ...student,
@@ -148,6 +171,29 @@ export default function AdminDashboard({ profile }) {
           </p>
         </div>
       </div>
+
+      {/* 2-Day Absentee Notification Alert */}
+      {consecutiveAbsentees.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '16px', borderRadius: '8px', marginBottom: 28 }}>
+          <h3 style={{ color: '#dc2626', margin: '0 0 12px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>warning</span>
+            Critical: 2-Day Consecutive Absentees (Follow-up Required)
+          </h3>
+          <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+            {consecutiveAbsentees.map(student => (
+              <div key={student.id} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong style={{ fontSize: '13px', display: 'block', color: '#dc2626' }}>{student.fullName} ({student.batch})</strong>
+                  <span style={{ fontSize: '12px', color: '#666' }}>Phone: {student.phone}</span>
+                </div>
+                <span className="badge badge-admin" style={{ fontSize: 11, background: '#fee2e2', color: '#dc2626' }}>
+                  Absent since {student.lastAbsentDate}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Primary KPI Widgets */}
       <div className="grid-4" style={{ marginBottom: 28 }}>

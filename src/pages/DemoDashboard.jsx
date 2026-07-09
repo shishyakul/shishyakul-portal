@@ -104,7 +104,7 @@ export default function DemoDashboard() {
     try {
       if (action === 'admit') {
         await updateDoc(doc(db, 'students', studentId), {
-          status: 'admitted',
+          status: 'pending_admission',
           demoCompletionStatus: 'converted',
           demoConvertedAt: new Date().toISOString()
         });

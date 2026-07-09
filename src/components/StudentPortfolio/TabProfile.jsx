@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { createPortal } from 'react-dom';
 
@@ -10,6 +10,7 @@ export default function TabProfile({ student }) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ ...student });
   const [saving, setSaving] = useState(false);
+  const [generatingPortal, setGeneratingPortal] = useState(false);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -51,6 +52,103 @@ export default function TabProfile({ student }) {
     setSaving(false);
   };
 
+  const handleGeneratePortal = async () => {
+    if (!student.emailId) {
+      alert("This student doesn't have an email address recorded. Please edit the profile and add an Email ID first.");
+      return;
+    }
+    if (!student.batch) {
+      alert("Please allocate a batch to this student from the Batch Allocation page before generating the portal.");
+      return;
+    }
+
+    if (!window.confirm(`Generate portal access for ${student.studentName} and email credentials to ${student.emailId}?`)) return;
+
+    setGeneratingPortal(true);
+    try {
+      // 1. Generate secure password (8 chars)
+      const randomPass = Math.random().toString(36).slice(-8) + 'Shishyakul@1';
+      
+      // 2. Create Auth Account
+      const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+      const authRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: student.emailId.trim(), password: randomPass, returnSecureToken: true })
+      });
+      const authData = await authRes.json();
+      if (!authRes.ok || authData.error) throw new Error(authData.error?.message || 'Failed to create student account');
+      const newUid = authData.localId;
+
+      // 3. Create users document for role routing
+      await setDoc(doc(db, 'users', newUid), {
+        email: student.emailId.trim(),
+        fullName: student.studentName,
+        mobile: student.contactNo || '',
+        role: 'student',
+        studentId: student.id,
+        batch: student.batch,
+        createdAt: serverTimestamp(),
+      });
+
+      // 4. Update student document
+      await updateDoc(doc(db, 'students', student.id), {
+        portalGenerated: true,
+        portalUid: newUid,
+        portalPassword: randomPass
+      });
+
+      // 5. Send Email via Google Apps Script Webhook
+      const appScriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
+      if (appScriptUrl) {
+        const emailBody = `Dear Parent / Guardian,
+
+We are delighted to welcome ${student.studentName} to Shishyakul!
+Their personalized Student Academic Portal has been successfully generated. 
+
+You and your child can log in to view timetables, access course materials, submit assignments, and track performance.
+
+Portal Link: https://shishyakul.in/login
+Login Email: ${student.emailId.trim()}
+Temporary Password: ${randomPass}
+
+Please keep these credentials secure.
+
+Warm Regards,
+Shishyakul Administration`;
+
+        await fetch(appScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send_dynamic_email',
+            to: student.emailId.trim(),
+            subject: `Welcome to Shishyakul - Portal Access Details for ${student.studentName}`,
+            body: emailBody
+          })
+        });
+        alert("Portal generated successfully! Welcome email has been dispatched to the parent.");
+      } else {
+        alert("Portal generated successfully! (Note: Welcome email was NOT sent because VITE_APP_SCRIPT_URL is missing in your .env file).");
+      }
+    } catch (err) {
+      console.error(err);
+      let msg = err.message;
+      if (msg.includes('EMAIL_EXISTS')) {
+        alert("An account with this email already exists in Firebase Auth. Automatically marking this student's portal as active.");
+        await updateDoc(doc(db, 'students', student.id), {
+          portalGenerated: true,
+          portalPassword: 'Hidden (Pre-existing account)'
+        });
+      } else {
+        alert(`Failed to generate portal: ${msg}`);
+      }
+    } finally {
+      setGeneratingPortal(false);
+    }
+  };
+
   const actionsPortal = document.getElementById('sd-profile-actions-portal');
 
   return (
@@ -65,9 +163,27 @@ export default function TabProfile({ student }) {
               </button>
             </div>
           ) : (
-            <button className="btn-ghost" onClick={() => setIsEditing(true)} style={{ width: '100%', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Edit Profile
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {!student.portalGenerated && (student.status === 'Admitted' || student.status === 'admitted') && (
+                <button className="btn-brand" onClick={handleGeneratePortal} disabled={generatingPortal} style={{ background: 'var(--brand-primary)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>vpn_key</span>
+                  {generatingPortal ? 'Generating...' : 'Generate Portal Access'}
+                </button>
+              )}
+              {student.portalGenerated && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface-bg)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--surface-border)', fontSize: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--status-success)', fontWeight: 600, marginBottom: '2px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>check_circle</span>
+                    Portal Active
+                  </div>
+                  <div><strong>Email:</strong> {student.emailId}</div>
+                  <div><strong>Pass:</strong> {student.portalPassword || 'Hidden'}</div>
+                </div>
+              )}
+              <button className="btn-ghost" onClick={() => setIsEditing(true)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Edit Profile
+              </button>
+            </div>
           )}
         </div>,
         actionsPortal

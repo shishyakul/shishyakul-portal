@@ -27,9 +27,11 @@ export default function TabAttendance({ student }) {
           return logDate >= joiningDate;
         }).map(log => {
           const isAbsent = log.absenteeIds && log.absenteeIds.includes(student.id);
+          const isLate = log.lateStudents && log.lateStudents[student.id];
           return {
             ...log,
-            status: isAbsent ? 'Absent' : 'Present'
+            status: isAbsent ? 'Absent' : isLate ? 'Late' : 'Present',
+            lateInfo: isLate || null
           };
         });
         
@@ -85,10 +87,20 @@ export default function TabAttendance({ student }) {
             <tbody>
               {attendanceLogs.map(log => (
                 <tr key={log.id}>
-                  <td>{log.date}</td>
+                  <td>
+                    {log.date}
+                    {log.lateInfo && (
+                      <div style={{ fontSize: '12px', color: '#ea580c', marginTop: '4px' }}>
+                        Late by {log.lateInfo.minutes} mins ({log.lateInfo.reason})
+                      </div>
+                    )}
+                  </td>
                   <td>{log.sessionType || 'Regular'}</td>
                   <td>
-                    <span className={`sd-badge ${log.status === 'Present' ? 'sd-badge-status' : ''}`} style={{ background: log.status === 'Absent' ? 'var(--status-error)' : undefined, color: log.status === 'Absent' ? '#fff' : undefined }}>
+                    <span className={`sd-badge ${log.status === 'Present' ? 'sd-badge-status' : ''}`} style={{ 
+                      background: log.status === 'Absent' ? 'var(--status-error)' : log.status === 'Late' ? 'rgba(249, 115, 22, 0.1)' : undefined, 
+                      color: log.status === 'Absent' ? '#fff' : log.status === 'Late' ? '#ea580c' : undefined 
+                    }}>
                       {log.status}
                     </span>
                   </td>

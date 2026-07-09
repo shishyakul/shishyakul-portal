@@ -72,11 +72,10 @@ export default function PendingAdmissions() {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'students'), where('status', '==', 'admitted'));
+    const q = query(collection(db, 'students'), where('status', '==', 'pending_admission'));
     const unsub = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const pending = data.filter(s => !s.admissionDate);
-      setPendingStudents(pending);
+      setPendingStudents(data);
       setLoading(false);
     });
 
@@ -171,6 +170,25 @@ export default function PendingAdmissions() {
   };
 
   const handleAdmitSubmit = async () => {
+    // 1. Strict Validation of Mandatory Fields
+    const requiredFields = {
+      studentName: 'Student Name',
+      dob: 'Date of Birth',
+      gender: 'Gender',
+      contactNo: 'Contact Number',
+      schoolName: 'School Name',
+      standard: 'Standard',
+      board: 'Board',
+      address: 'Address'
+    };
+
+    const missingFields = Object.keys(requiredFields).filter(key => !admitForm[key] || String(admitForm[key]).trim() === '');
+    
+    if (missingFields.length > 0) {
+      const fieldNames = missingFields.map(key => requiredFields[key]).join(', ');
+      return alert(`Strict Pipeline Enforcement: The following mandatory fields must be filled before admission:\n\n${fieldNames}`);
+    }
+
     if (!admitForm.guruDakshina) {
       return alert("Guru Dakshina checkbox acknowledgment is required for enrollment!");
     }
@@ -199,12 +217,12 @@ export default function PendingAdmissions() {
       await updateDoc(doc(db, 'students', pendingAdmitId), {
         howDidYouKnow: admitForm.howDidYouKnow,
         photoDataUrl: admitForm.photoDataUrl,
-        studentName: admitForm.studentName,
+        studentName: admitForm.studentName ? admitForm.studentName.trim() : '',
         dob: admitForm.dob,
         gender: admitForm.gender,
         contactNo: admitForm.contactNo,
         contactNumber: admitForm.contactNo, 
-        emailId: admitForm.emailId,
+        emailId: admitForm.emailId ? admitForm.emailId.trim().toLowerCase() : '',
         aadharNo: admitForm.aadharNo,
         schoolName: admitForm.schoolName,
         standard: admitForm.standard,
@@ -251,6 +269,7 @@ export default function PendingAdmissions() {
         parentSignatureAdmission: parentSig,
         adminSignatureAdmission: adminSig,
 
+        status: 'admitted',
         admissionDate: new Date().toISOString()
       });
 
