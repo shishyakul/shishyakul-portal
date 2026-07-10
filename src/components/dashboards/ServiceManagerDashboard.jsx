@@ -14,6 +14,7 @@ export default function ServiceManagerDashboard() {
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [syllabusProgress, setSyllabusProgress] = useState([]);
   const [testWorkflows, setTestWorkflows] = useState([]);
+  const [lectureReports, setLectureReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const getTodayDateStr = () => {
@@ -69,6 +70,10 @@ export default function ServiceManagerDashboard() {
       setSyllabusProgress(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
+    const unsubLectureReports = onSnapshot(collection(db, 'lecture_reports'), (snap) => {
+      setLectureReports(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+    });
+
     setTimeout(() => setLoading(false), 300);
     return () => {
       unsubStudents();
@@ -78,6 +83,7 @@ export default function ServiceManagerDashboard() {
       unsubTests();
       unsubAttendance();
       unsubSyllabus();
+      unsubLectureReports();
     };
   }, []);
 
@@ -351,6 +357,42 @@ export default function ServiceManagerDashboard() {
                           <span>{cls.subject || 'N/A'}</span>
                           <span style={{ color: 'var(--text-primary)' }}>👨‍🏫 {cls.teacher}</span>
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Post-Lecture Reports Feed */}
+          <div className="portal-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', background: 'linear-gradient(90deg, var(--surface-bg), rgba(16, 185, 129, 0.05))', borderBottom: '1px solid var(--surface-border)' }}>
+              <h2 style={{ margin: 0, fontSize: 18, display: 'flex', alignItems: 'center', gap: 8, color: '#10b981' }}>
+                <span className="material-symbols-outlined">description</span>
+                Recent Post-Lecture Reports
+              </h2>
+            </div>
+            <div style={{ padding: 20, maxHeight: '350px', overflowY: 'auto' }}>
+              {lectureReports.length === 0 ? (
+                <div className="empty-state">No lecture reports submitted yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {lectureReports.slice(0, 10).map((rep) => (
+                    <div key={rep.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 8, borderLeft: '4px solid #10b981', borderTop: '1px solid var(--surface-border)', borderRight: '1px solid var(--surface-border)', borderBottom: '1px solid var(--surface-border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{rep.batch} <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal' }}>| {rep.subject}</span></div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rep.date} • {rep.teacherName}</div>
+                      </div>
+                      <div style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 8 }}>
+                        <strong>Topic:</strong> {rep.topicTaught} <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>({rep.amountTaught})</span>
+                      </div>
+                      <div style={{ fontSize: 13, background: '#f9fafb', padding: 8, borderRadius: 4, marginBottom: 8 }}>
+                        <strong>Homework:</strong> {rep.homework}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        <span><strong>Next:</strong> {rep.nextTarget}</span>
+                        {rep.remarks && <span style={{ fontStyle: 'italic' }}>Note: {rep.remarks}</span>}
                       </div>
                     </div>
                   ))}

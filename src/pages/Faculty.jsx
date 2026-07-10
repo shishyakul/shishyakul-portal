@@ -15,113 +15,8 @@ const DEFAULT_SYLLABUS = [
 
 // Faculty Management Modals and components will go here
 
-function CreateTeacherModal({ onClose }) {
-  const [form, setForm] = useState({ fullName: '', email: '', mobile: '', subjects: '', password: '', isSenior: true });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSave = async () => {
-    if (!form.email.trim() || !form.fullName.trim() || !form.tempPassword?.trim() || !form.subjects.trim()) {
-      setError('Name, Email, Subjects, and Password are required.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    
-    try {
-      const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-      const authRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email.trim(), password: form.tempPassword, returnSecureToken: true })
-      });
-      const authData = await authRes.json();
-      if (!authRes.ok || authData.error) throw new Error(authData.error?.message || 'Failed to create teacher account');
-
-      const newUid = authData.localId;
-      await setDoc(doc(db, 'users', newUid), {
-        email: form.email.trim(),
-        fullName: form.fullName.trim(),
-        mobile: form.mobile.trim(),
-        subjects: form.subjects.trim(),
-        isSenior: form.isSenior,
-        assignedBatches: [],
-        role: 'teacher',
-        portalGenerated: true,
-        portalPassword: form.tempPassword,
-        createdAt: serverTimestamp(),
-      });
-
-      // Send Email via Webhook
-      try {
-        const appScriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (appScriptUrl) {
-          const emailBody = `Dear ${form.fullName},\n\nYour Faculty Portal has been generated.\n\nPortal Link: https://portal.shishyakul.in/login\nLogin Email: ${form.email}\nTemporary Password: ${form.tempPassword}\n\nRegards,\nShishyakul Administration`;
-          await fetch(appScriptUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'send_dynamic_email',
-              to: form.email,
-              subject: 'Shishyakul Faculty Portal Access',
-              body: emailBody
-            })
-          });
-          alert("Teacher Portal created successfully and welcome email dispatched!");
-        } else {
-          alert("Teacher Portal created successfully! (Note: Welcome email skipped because VITE_APP_SCRIPT_URL is missing in .env)");
-        }
-      } catch (e) {
-        console.error("Email error:", e);
-        alert("Teacher Portal created, but failed to dispatch welcome email.");
-      }
-
-      onClose();
-    } catch (e) {
-      let msg = e.message;
-      if (msg.includes('EMAIL_EXISTS')) msg = 'This email address is already in use.';
-      if (msg.includes('WEAK_PASSWORD')) msg = 'Password should be at least 6 characters.';
-      setError(msg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-box">
-        <h2 className="modal-title">Create Teacher Portal</h2>
-        {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
-        <div className="form-group"><label className="form-label">Full Name *</label><input className="portal-input" value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} /></div>
-        <div className="form-group"><label className="form-label">Email Address *</label><input className="portal-input" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-        <div className="form-group">
-          <label className="form-label">Temporary Password *</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input className="portal-input" value={form.tempPassword} onChange={e => setForm(f => ({ ...f, tempPassword: e.target.value }))} style={{ flex: 1 }} />
-            <button type="button" className="btn btn-ghost" style={{ padding: '0 12px' }} onClick={() => {
-              const randomPass = Math.random().toString(36).slice(-8);
-              setForm(f => ({ ...f, tempPassword: randomPass }));
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>autorenew</span>
-            </button>
-          </div>
-        </div>
-        <div className="form-group"><label className="form-label">Subjects Taught *</label><input className="portal-input" placeholder="e.g. Science, Maths" value={form.subjects} onChange={e => setForm(f => ({ ...f, subjects: e.target.value }))} /></div>
-        <div className="form-group"><label className="form-label">Mobile</label><input className="portal-input" value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} /></div>
-        <div className="form-group"><label className="form-label">Seniority</label><select className="portal-select" value={form.isSenior} onChange={e => setForm(f => ({ ...f, isSenior: e.target.value === 'true' }))}><option value="true">Senior</option><option value="false">Junior</option></select></div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="btn btn-brand" onClick={handleSave} disabled={saving}>{saving ? 'Generating...' : 'Generate Portal'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Faculty() {
   const [activeTeachers, setActiveTeachers] = useState([]);
-  const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [manageBatchesTeacher, setManageBatchesTeacher] = useState(null);
   const [expandedCards, setExpandedCards] = useState({});
 
@@ -498,22 +393,18 @@ export default function Faculty() {
 
   return (
     <div className="faculty-container">
-      {showTeacherModal && <CreateTeacherModal onClose={() => setShowTeacherModal(false)} />}
       <div className="faculty-header-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1>Faculty Coordinator Hub</h1>
           <p>Logged in as Rohan Sir (Service Manager) • Manage teacher schedules, demo audits, and evaluate calling feedback logs.</p>
         </div>
-        <button className="btn btn-brand" onClick={() => setShowTeacherModal(true)}>
-          <span className="material-symbols-outlined">person_add</span> Create Teacher Portal
-        </button>
       </div>
 
       {/* Grid: Teachers Cards */}
       <h2 className="section-header-title">Active Faculty Members</h2>
       <div className="faculty-cards-grid">
         {activeTeachers.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)' }}>No teachers created yet. Click "Create Teacher Portal" to add faculty.</p>
+          <p style={{ color: 'var(--text-muted)' }}>No teachers created yet. Please use the Manage Teachers tab to add faculty.</p>
         ) : activeTeachers.map(teacher => (
           <div key={teacher.id} className={`portal-card teacher-profile-card ${teacher.isSenior ? 'senior' : 'junior'}`} onClick={() => {
             setSelectedFaculty(teacher);

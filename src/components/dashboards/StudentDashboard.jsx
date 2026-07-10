@@ -33,6 +33,7 @@ export default function StudentDashboard({ profile }) {
   const [isBattalionEnrolled, setIsBattalionEnrolled] = useState(false);
   const [battalionProfile, setBattalionProfile] = useState(null);
   const [studentRecord, setStudentRecord] = useState(null);
+  const [lectureReports, setLectureReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [submitForm, setSubmitForm] = useState({
@@ -54,7 +55,7 @@ export default function StudentDashboard({ profile }) {
   const batchName = profile?.batch;
 
   useEffect(() => {
-    let unsubMat, unsubSub, unsubAtt, unsubTimetable;
+    let unsubMat, unsubSub, unsubAtt, unsubTimetable, unsubLectureReports;
     
     if (batchName) {
       // 1. Listen to Course Materials for student's batch
@@ -76,12 +77,16 @@ export default function StudentDashboard({ profile }) {
           const data = d.data();
           const isAbsent = data.absenteeIds && data.absenteeIds.includes(profile.studentId);
           const lateInfo = data.lateStudents ? data.lateStudents[profile.studentId] : null;
+          const selfStudyLog = data.selfStudyLogs ? data.selfStudyLogs[profile.studentId] : null;
+          const inOutTime = data.inOutTimes ? data.inOutTimes[profile.studentId] : null;
           return {
             id: d.id,
             date: data.date,
             sessionType: data.sessionType || 'Regular Class',
             status: isAbsent ? 'Absent' : 'Present',
             lateInfo: lateInfo,
+            selfStudyLog: selfStudyLog,
+            inOutTime: inOutTime,
             timestamp: data.timestamp
           };
         });
@@ -98,6 +103,12 @@ export default function StudentDashboard({ profile }) {
         } else {
           setTimetable({});
         }
+      });
+
+      // 5. Listen to Post-Lecture Reports for this batch
+      const qLectureReports = query(collection(db, 'lecture_reports'), where('batch', '==', batchName));
+      unsubLectureReports = onSnapshot(qLectureReports, (snap) => {
+        setLectureReports(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
       });
     }
 
@@ -203,6 +214,7 @@ export default function StudentDashboard({ profile }) {
       if (unsubSub) unsubSub(); 
       if (unsubAtt) unsubAtt(); 
       if (unsubTimetable) unsubTimetable(); 
+      if (unsubLectureReports) unsubLectureReports();
       unsubTeachers(); 
       unsubStudent(); 
       unsubBattalion(); 
@@ -262,7 +274,6 @@ export default function StudentDashboard({ profile }) {
     }
   }, [isAlumniOnly, activeTab]);
 
-  if (loading) return <div className="empty-state"><div className="spinner"/></div>;
 
   const assignments = materials.filter(m => m.type === 'Assignment');
 
@@ -275,6 +286,34 @@ export default function StudentDashboard({ profile }) {
   gradedSubmissions.forEach(s => totalMarks += (s.marks || 0));
   const averageMarks = gradedSubmissions.length > 0 ? Math.round(totalMarks / gradedSubmissions.length) : 0;
 
+  const allFeedbacks = studentRecord?.feedbacks || [];
+  const allPtms = studentRecord?.ptmNotices || [];
+  const allTests = studentRecord?.testHistory || [];
+  
+  const pendingPtms = allPtms.filter(p => p.status === 'pending');
+  const recentTests = allTests.filter(t => {
+    let d = new Date(t.date);
+    if (isNaN(d.getTime()) && typeof t.date === 'string') {
+      d = new Date(t.date.split('/').reverse().join('-'));
+    }
+    return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
+  });
+
+  const performanceBadge = allFeedbacks.length;
+  const noticeBadge = pendingPtms.length + recentTests.length;
+
+  useEffect(() => {
+    const event = new CustomEvent('updateSidebarBadges', { 
+      detail: { 
+        'Performance': { count: performanceBadge, id: performanceBadge }, 
+        'Teacher Feeds & Notices': { count: noticeBadge, id: noticeBadge } 
+      } 
+    });
+    window.dispatchEvent(event);
+  }, [performanceBadge, noticeBadge]);
+
+  if (loading) return <div className="empty-state"><div className="spinner"/></div>;
+
   return (
     <div className="dashboard student-dashboard">
       <div className="dashboard-header">
@@ -282,26 +321,6 @@ export default function StudentDashboard({ profile }) {
         <p>Welcome back, {profile?.fullName ?? 'Student'} • {batchName || 'No Batch Assigned'}</p>
       </div>
 
-      <div className="portal-tabs" style={{ marginBottom: 24, overflowX: 'auto', whiteSpace: 'nowrap' }}>
-        {!isAlumniOnly && (
-          <>
-            <button className={`portal-tab ${activeTab === 'feed' ? 'active' : ''}`} onClick={() => handleTabChange('feed')}>My Feed</button>
-            <button className={`portal-tab ${activeTab === 'submit' ? 'active' : ''}`} onClick={() => handleTabChange('submit')}>Submit Work</button>
-            <button className={`portal-tab ${activeTab === 'timetable' ? 'active' : ''}`} onClick={() => handleTabChange('timetable')}>Timetable</button>
-            <button className={`portal-tab ${activeTab === 'attendance' ? 'active' : ''}`} onClick={() => handleTabChange('attendance')}>Attendance</button>
-            <button className={`portal-tab ${activeTab === 'performance' ? 'active' : ''}`} onClick={() => handleTabChange('performance')}>Performance</button>
-            <button className={`portal-tab ${activeTab === 'finances' ? 'active' : ''}`} onClick={() => handleTabChange('finances')}>Finances</button>
-            <button className={`portal-tab ${activeTab === 'support' ? 'active' : ''}`} onClick={() => handleTabChange('support')}>Support</button>
-          </>
-        )}
-        
-        {isBattalionEnrolled && (
-          <button className={`portal-tab ${activeTab === 'battalion' ? 'active' : ''}`} onClick={() => handleTabChange('battalion')} style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', color: '#fff', border: 'none', fontWeight: 'bold' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 4, verticalAlign: 'middle' }}>hub</span>
-            Battalion Network
-          </button>
-        )}
-      </div>
 
       {!batchName && !isAlumniOnly ? (
         <div className="empty-state">Your batch has not been assigned yet. Please contact administration.</div>
@@ -592,7 +611,7 @@ export default function StudentDashboard({ profile }) {
 
           {activeTab === 'performance' && (
             <div className="portal-card" style={{ padding: 0 }}>
-              <TabPerformance student={{ ...profile, id: profile.studentId || profile.uid, batch: batchName }} />
+              <TabPerformance student={{ ...profile, id: profile.studentId || profile.uid, batch: batchName }} allFeedbacks={allFeedbacks} />
             </div>
           )}
 
@@ -729,6 +748,55 @@ export default function StudentDashboard({ profile }) {
                   </div>
                 </div>
               </div>
+
+              {attendance.some(att => att.sessionType === 'Self-Study' && att.selfStudyLog) && (
+                <div className="portal-card" style={{ marginTop: 24 }}>
+                  <h2 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>menu_book</span>
+                    Self-Study Activity Logs
+                  </h2>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                    {attendance.filter(att => att.sessionType === 'Self-Study' && att.selfStudyLog).map(att => (
+                      <div key={att.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 12, border: '1px solid var(--surface-border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid var(--surface-border)', paddingBottom: 8 }}>
+                          <strong style={{ fontSize: 14 }}>{new Date(att.date).toLocaleDateString()}</strong>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
+                            <span>In: {att.inOutTime?.in || '--'}</span>
+                            <span>Out: {att.inOutTime?.out || '--'}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--brand-primary)', marginTop: 2 }}>subject</span>
+                            <div>
+                              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Subject</div>
+                              <div style={{ fontSize: 14, fontWeight: 500 }}>{att.selfStudyLog.subject || 'Not specified'}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#f97316', marginTop: 2 }}>import_contacts</span>
+                            <div>
+                              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Topic / Syllabus</div>
+                              <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{att.selfStudyLog.topic || 'No details provided'}</div>
+                            </div>
+                          </div>
+                        </div>
+                        {att.selfStudyLog.teacherScore !== undefined && (
+                          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px dashed var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#f57c00' }}>star</span>
+                              Teacher Review
+                            </span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary)' }}>
+                              {att.selfStudyLog.teacherScore} <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>/ 10</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             );
           })()}
@@ -861,6 +929,97 @@ export default function StudentDashboard({ profile }) {
                   Submit Ticket
                 </button>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'feedback_ptm' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>rate_review</span>
+                Teacher Feeds & Notices
+              </h2>
+              
+              {/* Recent Test Results */}
+              <div className="portal-card" style={{ borderTop: '4px solid #f59e0b' }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined">military_tech</span>
+                  Recent Test Results
+                </h3>
+                {recentTests.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No new tests graded in the last 7 days.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {[...recentTests].reverse().map((test, idx) => (
+                      <div key={idx} style={{ padding: 16, background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 16, color: '#b45309' }}>{test.subject} <span style={{fontSize: 12, fontWeight: 'normal', opacity: 0.8}}>({test.type || 'Test'})</span></strong>
+                          <span className="badge" style={{ background: '#f59e0b', color: 'white' }}>NEW SCORE</span>
+                        </div>
+                        <p style={{ margin: '0 0 4px 0', fontSize: 14 }}><strong>Date:</strong> {test.date}</p>
+                        <p style={{ margin: 0, fontSize: 14 }}>
+                          <strong>Score:</strong> <span style={{ fontSize: 16, fontWeight: 'bold' }}>{test.obtainedMarks ?? test.marks ?? 0} / {test.maxMarks || '-'}</span> <span style={{ color: 'var(--text-secondary)' }}>({test.percentage ?? (test.maxMarks ? (((test.obtainedMarks ?? test.marks ?? 0) / test.maxMarks) * 100).toFixed(2) : 0)}%)</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Post-Lecture Reports Section */}
+              <div className="portal-card" style={{ borderTop: '4px solid #10b981' }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#10b981', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined">description</span>
+                  Recent Class Summaries & Homework
+                </h3>
+                {lectureReports.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No class summaries available.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {lectureReports.slice(0, 10).map((rep) => (
+                      <div key={rep.id} style={{ padding: 16, background: 'var(--surface-bg)', borderRadius: 8, border: '1px solid var(--surface-border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 16 }}>{rep.subject} <span style={{ color: 'var(--text-secondary)', fontWeight: 'normal', fontSize: 14 }}>by {rep.teacherName}</span></strong>
+                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rep.date}</span>
+                        </div>
+                        <p style={{ margin: '0 0 8px 0', fontSize: 14 }}><strong>Topic Taught:</strong> {rep.topicTaught}</p>
+                        <div style={{ background: '#f0fdf4', padding: 12, borderRadius: 6, marginBottom: 8, border: '1px solid #bbf7d0' }}>
+                          <strong style={{ color: '#166534', display: 'block', marginBottom: 4 }}>Homework Assigned:</strong>
+                          <span style={{ color: '#166534', fontSize: 14 }}>{rep.homework}</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 14 }}><strong>Next Target:</strong> {rep.nextTarget}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* PTM Notices Section */}
+              <div className="portal-card" style={{ borderTop: '4px solid #d32f2f' }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#d32f2f', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined">warning</span>
+                  Parent-Teacher Meeting (PTM) Notices
+                </h3>
+                {allPtms.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No PTM notices scheduled.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {[...allPtms].reverse().map((ptm, idx) => (
+                      <div key={idx} style={{ padding: 16, background: ptm.status === 'pending' ? '#ffebee' : '#f5f5f5', borderRadius: 8, border: ptm.status === 'pending' ? '1px solid #ffcdd2' : '1px solid #e0e0e0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 16 }}>Requested by: {ptm.teacherName}</strong>
+                          <span className={`badge ${ptm.status === 'pending' ? 'badge-admin' : 'badge-service-manager'}`} style={{ background: ptm.status === 'pending' ? '#d32f2f' : '#757575', color: 'white' }}>
+                            {ptm.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <p style={{ margin: '0 0 4px 0', fontSize: 14 }}><strong>Scheduled Date:</strong> {new Date(ptm.dateScheduled).toLocaleDateString()}</p>
+                        <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}><strong>Reason:</strong> {ptm.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+
             </div>
           )}
 

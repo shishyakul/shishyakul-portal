@@ -236,7 +236,7 @@ export default function StudentsDirectory() {
             <div className="sd-tab-content-area" style={{ background: '#f8fafc', overflowY: 'auto' }}>
               {activeTab === 'profile' && <TabProfile student={selectedStudent} />}
               {activeTab === 'attendance' && <TabAttendance student={selectedStudent} />}
-              {activeTab === 'performance' && <TabPerformance student={selectedStudent} />}
+              {activeTab === 'performance' && <TabPerformance student={selectedStudent} allFeedbacks={selectedStudent.feedbacks || []} />}
               {activeTab === 'fees' && <TabFees student={selectedStudent} />}
               {activeTab === 'assets' && <TabAssets student={selectedStudent} />}
             </div>

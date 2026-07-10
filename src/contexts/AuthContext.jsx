@@ -1,7 +1,7 @@
 // Auth Context — manages Firebase user session across the whole portal
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const AuthContext = createContext(null);
@@ -14,25 +14,34 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Real Firebase Auth listener
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      let profileUnsubscribe = null;
+
       if (firebaseUser) {
         setUser(firebaseUser);
-        // Fetch role + profile from Firestore users collection
-        try {
-          const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (snap.exists()) {
-            setProfile(snap.data());
-          } else {
-            // User exists in Auth but not in Firestore yet — create a minimal profile
+        // Real-time listener for role + profile from Firestore
+        profileUnsubscribe = onSnapshot(
+          doc(db, 'users', firebaseUser.uid),
+          (snap) => {
+            if (snap.exists()) {
+              setProfile(snap.data());
+            } else {
+              setProfile({ role: 'unknown', fullName: firebaseUser.email });
+            }
+          },
+          (err) => {
+            console.error('Failed to listen to profile:', err);
             setProfile({ role: 'unknown', fullName: firebaseUser.email });
           }
-        } catch {
-          setProfile({ role: 'unknown', fullName: firebaseUser.email });
-        }
+        );
       } else {
         setUser(null);
         setProfile(null);
       }
       setLoading(false);
+      
+      return () => {
+        if (profileUnsubscribe) profileUnsubscribe();
+      };
     });
 
     return unsubscribe;

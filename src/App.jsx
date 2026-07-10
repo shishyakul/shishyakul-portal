@@ -19,10 +19,13 @@ import DemoDashboard from './pages/DemoDashboard';
 import StudentsDirectory from './pages/StudentsDirectory';
 import './index.css';
 
+import TopActions from './components/TopActions';
+
 /* ── Layout wrapper for authenticated pages ── */
 function PortalLayout({ children }) {
   return (
     <div className="portal-shell">
+      <TopActions />
       <Sidebar />
       <main className="portal-main">
         {children}
@@ -50,7 +53,7 @@ export default function App() {
             } />
 
             <Route path="/users" element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute allowedRoles={['admin', 'branch_manager', 'service_manager']}>
                 <PortalLayout>
                   <Users />
                 </PortalLayout>

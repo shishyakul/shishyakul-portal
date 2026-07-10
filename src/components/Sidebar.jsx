@@ -29,7 +29,6 @@ const NAV_CONFIG = {
     { to: '/fees',        icon: 'payments',        label: 'Fees Ledger' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/students',    icon: 'school',          label: 'Students' },
-    { to: '/users',       icon: 'group',           label: 'Users' },
   ],
   branch_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -39,12 +38,14 @@ const NAV_CONFIG = {
     { to: '/batches',     icon: 'view_kanban',     label: 'Batch Allocation' },
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
+    { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
   ],
   service_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
     { to: '/faculty',     icon: 'school',          label: 'Faculty Hub' },
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
+    { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
   ],
   front_desk_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -59,6 +60,7 @@ const NAV_CONFIG = {
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
   ],
   teacher: [
+    { to: '/dashboard#home',      icon: 'home',            label: 'Home' },
     { to: '/dashboard#batches',   icon: 'groups',          label: 'My Batches' },
     { to: '/dashboard#timetable', icon: 'dashboard',       label: 'My Timetable' },
     { to: '/dashboard#materials', icon: 'auto_stories',    label: 'Course Materials' },
@@ -70,6 +72,9 @@ const NAV_CONFIG = {
     { to: '/dashboard#timetable', icon: 'calendar_month',  label: 'Timetable' },
     { to: '/dashboard#attendance',icon: 'event_available', label: 'Attendance' },
     { to: '/dashboard#performance',icon: 'military_tech',  label: 'Performance' },
+    { to: '/dashboard#feedback_ptm', icon: 'rate_review', label: 'Teacher Feeds & Notices' },
+    { to: '/dashboard#finances',  icon: 'payments',        label: 'Finances' },
+    { to: '/dashboard#support',   icon: 'support_agent',   label: 'Support' }
   ]
 };
 
@@ -101,7 +106,48 @@ export default function Sidebar() {
     }
   };
 
-  const navItems = NAV_CONFIG[profile?.role] || NAV_CONFIG.front_desk_manager;
+  const [badges, setBadges] = useState({});
+  const [clearedBadges, setClearedBadges] = useState({});
+
+  useEffect(() => {
+    if (profile?.email) {
+      try {
+        const saved = localStorage.getItem(`shishyakul_cleared_badges_${profile.email}`);
+        if (saved) {
+          setClearedBadges(JSON.parse(saved));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }, [profile?.email]);
+
+  useEffect(() => {
+    const handleUpdate = (e) => {
+      if (e.detail) {
+        // e.detail should be like { tabLabel: { count: 2, id: 'timestamp_or_hash' } }
+        setBadges(prev => ({ ...prev, ...e.detail }));
+      }
+    };
+    window.addEventListener('updateSidebarBadges', handleUpdate);
+    return () => window.removeEventListener('updateSidebarBadges', handleUpdate);
+  }, []);
+
+  const handleTabClick = (label) => {
+    if (badges[label]) {
+      setClearedBadges(prev => {
+        const next = { ...prev, [label]: badges[label].id || badges[label].count };
+        localStorage.setItem(`shishyakul_cleared_badges_${profile?.email}`, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
+
+  const baseNavItems = NAV_CONFIG[profile?.role] || NAV_CONFIG.front_desk_manager;
+  let navItems = [...baseNavItems];
+  if (profile?.role === 'student' && profile?.battalionEnrolled) {
+    navItems.push({ to: '/dashboard#battalion', icon: 'hub', label: 'Battalion Network' });
+  }
 
   return (
     <>
@@ -119,15 +165,29 @@ export default function Sidebar() {
       <aside className="sidebar">
         {/* Brand */}
       <div className="sidebar-brand">
-        <img
-          src="/favicon.png"
-          alt="Shishyakul"
-          className="sidebar-logo"
-        />
-        <div className="sidebar-brand-text">
-          <span className="sidebar-brand-name">Shishyakul</span>
-          <span className="sidebar-brand-sub">Admin Portal</span>
-        </div>
+        {profile?.role === 'teacher' ? (
+          <>
+            <div className="sidebar-avatar" style={{ width: 40, height: 40, fontSize: 16, marginRight: 12 }}>
+              {(profile?.fullName ?? 'T')[0].toUpperCase()}
+            </div>
+            <div className="sidebar-brand-text">
+              <span className="sidebar-brand-name">{profile?.fullName ?? 'Teacher'}</span>
+              <span className="sidebar-brand-sub" style={{ color: 'var(--brand-primary)' }}>Empower Shishya</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <img
+              src="/favicon.png"
+              alt="Shishyakul"
+              className="sidebar-logo"
+            />
+            <div className="sidebar-brand-text">
+              <span className="sidebar-brand-name">Shishyakul</span>
+              <span className="sidebar-brand-sub">{profile?.role === 'student' ? 'Student Portal' : 'Admin Portal'}</span>
+            </div>
+          </>
+        )}
         <button className="sidebar-collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
           <span className="material-symbols-outlined">
             {isCollapsed ? 'chevron_right' : 'chevron_left'}
@@ -169,29 +229,39 @@ export default function Sidebar() {
               key={to}
               to={to}
               className={`sidebar-link ${isActive ? 'sidebar-link--active' : ''}`}
+              onClick={() => handleTabClick(label)}
             >
               <span className="material-symbols-outlined sidebar-link-icon">{icon}</span>
-              <span className="sidebar-link-label">{label}</span>
+              <span className="sidebar-link-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                {label}
+                {badges[label] && badges[label].count > 0 && clearedBadges[label] !== (badges[label].id || badges[label].count) && (
+                  <span className="badge" style={{ marginLeft: 6, background: '#e65100', color: 'white', padding: '2px 6px', fontSize: 10 }}>
+                    {badges[label].count}
+                  </span>
+                )}
+              </span>
             </NavLink>
           );
         })}
       </nav>
 
       {/* User footer */}
-      <div className="sidebar-footer">
-        <div className="sidebar-user">
-          <div className="sidebar-avatar">
-            {(profile?.fullName ?? 'A')[0].toUpperCase()}
+      {profile?.role !== 'teacher' && (
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">
+              {(profile?.fullName ?? 'A')[0].toUpperCase()}
+            </div>
+            <div className="sidebar-user-info">
+              <span className="sidebar-user-name">{profile?.fullName ?? 'Admin'}</span>
+              <span className="sidebar-user-email">{profile?.email ?? ''}</span>
+            </div>
           </div>
-          <div className="sidebar-user-info">
-            <span className="sidebar-user-name">{profile?.fullName ?? 'Admin'}</span>
-            <span className="sidebar-user-email">{profile?.email ?? ''}</span>
-          </div>
+          <button className="sidebar-logout-btn" onClick={logout} title="Logout">
+            <span className="material-symbols-outlined">logout</span>
+          </button>
         </div>
-        <button className="sidebar-logout-btn" onClick={logout} title="Logout">
-          <span className="material-symbols-outlined">logout</span>
-        </button>
-      </div>
+      )}
 
       {/* DEV ONLY ROLE SWITCHER */}
       {window.location.hostname === 'localhost' && (

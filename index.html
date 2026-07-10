@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shishyakul Portal</title>
+    <title>Shishyakul Admin</title>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        document.body.innerHTML += '<div style="position:fixed;top:0;left:0;background:red;color:white;z-index:9999;padding:20px;font-family:monospace;width:100%;">' + message + '<br/>' + (error && error.stack ? error.stack.replace(/\n/g, '<br/>') : '') + '</div>';
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        document.body.innerHTML += '<div style="position:fixed;top:0;left:0;background:red;color:white;z-index:9999;padding:20px;font-family:monospace;width:100%;">Unhandled Promise Rejection: ' + event.reason + '</div>';
+      });
+    </script>
     <meta name="robots" content="noindex, nofollow" />
   </head>
   <body>

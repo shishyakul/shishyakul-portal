@@ -45,6 +45,10 @@ export default function AttendanceGrid() {
   const [lateStudents, setLateStudents] = useState({});
   const [lateModal, setLateModal] = useState({ isOpen: false, studentId: null, minutes: '', reason: '' });
 
+  // Self-Study States
+  const [selfStudyLogs, setSelfStudyLogs] = useState({});
+  const [selfStudyModal, setSelfStudyModal] = useState({ isOpen: false, studentId: null, subject: '', topic: '' });
+
   // Follow-up States
   const [followupDate, setFollowupDate] = useState(new Date().toISOString().split('T')[0]);
   const [followupList, setFollowupList] = useState([]);
@@ -272,6 +276,7 @@ export default function AttendanceGrid() {
         absenteeIds: Array.from(absentees),
         lateStudents: lateStudents,
         inOutTimes: sessionType !== 'Regular' ? inOutTimes : null,
+        selfStudyLogs: sessionType === 'Self-Study' ? selfStudyLogs : null,
         timestamp: serverTimestamp()
       };
 
@@ -409,7 +414,7 @@ export default function AttendanceGrid() {
                     className={`student-card ${cardClass}`}
                     onClick={() => { if (sessionType === 'Regular') toggleAttendance(student.id); }}
                     style={{ 
-                      height: sessionType === 'Regular' ? 'auto' : '180px',
+                      height: 'auto',
                       background: isLate ? 'rgba(249, 115, 22, 0.05)' : undefined,
                       borderColor: isLate ? '#f97316' : undefined
                     }}
@@ -447,6 +452,23 @@ export default function AttendanceGrid() {
                             onChange={e => setInOutTimes({ ...inOutTimes, [student.id]: { ...inOutTimes[student.id], out: e.target.value } })}
                           />
                         </div>
+                        {sessionType === 'Self-Study' && (
+                          <button 
+                            className="btn-ghost" 
+                            style={{ padding: '6px', fontSize: '11px', marginTop: '4px', background: selfStudyLogs[student.id] ? 'rgba(52,211,153,0.1)' : 'var(--surface-bg)', color: selfStudyLogs[student.id] ? 'var(--status-success)' : 'var(--brand-primary)', border: `1px solid ${selfStudyLogs[student.id] ? 'var(--status-success)' : 'var(--brand-primary)'}`, cursor: 'pointer', borderRadius: '4px', width: '100%' }}
+                            onClick={(e) => {
+                               e.stopPropagation();
+                               setSelfStudyModal({ 
+                                 isOpen: true, 
+                                 studentId: student.id, 
+                                 subject: selfStudyLogs[student.id]?.subject || '', 
+                                 topic: selfStudyLogs[student.id]?.topic || '' 
+                               });
+                            }}
+                          >
+                            {selfStudyLogs[student.id] ? 'Topic Logged ✓' : '+ Log Topic'}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -571,6 +593,67 @@ export default function AttendanceGrid() {
                 style={{ padding: '10px 20px', background: '#f97316', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
               >
                 Mark Late
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selfStudyModal.isOpen && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSelfStudyModal({ ...selfStudyModal, isOpen: false }); }}>
+          <div className="modal-box" style={{ maxWidth: '400px', width: '100%', animation: 'fadeIn 0.2s ease-out' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>menu_book</span>
+                Self-Study Topic
+              </h2>
+              <button 
+                onClick={() => setSelfStudyModal({ ...selfStudyModal, isOpen: false })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <div className="portal-form-group" style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px', display: 'block' }}>Subject</label>
+              <input 
+                type="text" 
+                className="portal-input" 
+                value={selfStudyModal.subject}
+                onChange={e => setSelfStudyModal({ ...selfStudyModal, subject: e.target.value })}
+                placeholder="e.g. Mathematics, Physics"
+              />
+            </div>
+            <div className="portal-form-group" style={{ marginBottom: '24px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px', display: 'block' }}>Syllabus / Chapter Details</label>
+              <textarea 
+                className="portal-input" 
+                value={selfStudyModal.topic}
+                onChange={e => setSelfStudyModal({ ...selfStudyModal, topic: e.target.value })}
+                placeholder="e.g. Chapter 4 - Calculus Practice"
+                style={{ minHeight: '80px', resize: 'vertical' }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setSelfStudyModal({ ...selfStudyModal, isOpen: false })}
+                style={{ padding: '10px 20px', border: '1px solid var(--surface-border)', background: 'var(--surface-bg)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-primary)' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setSelfStudyLogs(prev => ({
+                    ...prev,
+                    [selfStudyModal.studentId]: { subject: selfStudyModal.subject, topic: selfStudyModal.topic }
+                  }));
+                  setSelfStudyModal({ isOpen: false, studentId: null, subject: '', topic: '' });
+                }} 
+                style={{ padding: '10px 20px', background: 'var(--brand-primary)', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Save Log
               </button>
             </div>
           </div>

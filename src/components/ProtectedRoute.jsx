@@ -3,7 +3,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function ProtectedRoute({ children, adminOnly = false }) {
+export default function ProtectedRoute({ children, adminOnly = false, allowedRoles = [] }) {
   const { user, profile, loading } = useAuth();
 
   if (loading) {
@@ -31,6 +31,10 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   }
 
   if (adminOnly && profile?.role !== 'admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (allowedRoles.length > 0 && !allowedRoles.includes(profile?.role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
