@@ -79,9 +79,6 @@ export default function FrontendDeskDashboard({ profile }) {
           <h1 className="page-title">Welcome, {profile?.fullName?.split(' ')[0] ?? 'Shruti Maam'} 👋</h1>
           <p className="page-subtitle">Front Desk Reception Hub</p>
         </div>
-        <div>
-          <NotificationBell />
-        </div>
       </div>
 
       {/* Quick Access Buttons */}

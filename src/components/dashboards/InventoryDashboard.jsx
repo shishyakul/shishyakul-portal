@@ -60,9 +60,6 @@ export default function InventoryDashboard({ profile }) {
           <h1 className="page-title">Welcome, {profile?.fullName?.split(' ')[0] ?? 'Rupali Mam'} 👋</h1>
           <p className="page-subtitle">Inventory & Asset Command Center</p>
         </div>
-        <div>
-          <NotificationBell />
-        </div>
       </div>
 
       {/* Quick Access Buttons */}

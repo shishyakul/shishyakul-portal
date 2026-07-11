@@ -42,7 +42,7 @@ const NAV_CONFIG = {
   ],
   service_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
-    { to: '/faculty',     icon: 'school',          label: 'Faculty Hub' },
+    { to: '/faculty',     icon: 'school',          label: 'Crafting Table' },
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/users',       icon: 'group',           label: 'Manage Teachers' },

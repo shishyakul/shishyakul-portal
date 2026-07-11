@@ -178,9 +178,6 @@ export default function ServiceManagerDashboard() {
           <h1 className="page-title">Service Analytics Hub</h1>
           <p className="page-subtitle">Deep dive into operational, academic, and administrative metrics.</p>
         </div>
-        <div>
-          <NotificationBell />
-        </div>
       </div>
 
       {/* ZONE 1: Global KPIs */}

@@ -177,9 +177,6 @@ export default function AdminDashboard({ profile }) {
             Shishyakul Global Branch Analytics & Overview.
           </p>
         </div>
-        <div>
-          <NotificationBell />
-        </div>
       </div>
 
       {/* 2-Day Absentee Notification Alert */}

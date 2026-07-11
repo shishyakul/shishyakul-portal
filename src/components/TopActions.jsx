@@ -102,68 +102,68 @@ export default function TopActions({ onMenuClick }) {
         <div style={{ display: 'flex', gap: 16, marginLeft: 'auto' }}>
           {(!isStudentOrTeacher || profile?.role === 'branch_manager' || profile?.role === 'service_manager') && (
             <button 
-              onClick={() => setIsNotifOpen(true)}
-              className="btn-icon"
-              title="Notifications"
+              onClick={() => setIsTicketOpen(!isTicketOpen)}
+              className="btn btn-ghost"
+              title="Open Tickets"
               style={{
-                background: 'var(--surface-bg)',
+                position: 'relative',
+                background: 'white',
                 border: '1px solid var(--surface-border)',
                 borderRadius: '50%',
-                width: 44,
-                height: 44,
+                width: 42,
+                height: 42,
+                padding: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                position: 'relative'
+                color: 'var(--brand-primary)',
+                transition: 'transform 0.2s'
               }}
             >
-              <span className="material-symbols-outlined" style={{ color: 'var(--text-secondary)' }}>notifications</span>
-              {pendingCount > 0 && (
-                <span style={{
-                  position: 'absolute',
-                  top: -4,
-                  right: -4,
-                  background: 'var(--status-danger)',
-                  color: 'white',
-                  fontSize: 11,
-                  fontWeight: 'bold',
-                  width: 20,
-                  height: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '50%'
-                }}>
-                  {pendingCount > 99 ? '99+' : pendingCount}
-                </span>
-              )}
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>confirmation_number</span>
             </button>
           )}
 
           {(!isStudentOrTeacher || profile?.role === 'branch_manager' || profile?.role === 'service_manager') && (
             <button 
-              onClick={() => setIsTicketOpen(!isTicketOpen)}
-              className="btn-icon"
-              title="Create Support Ticket"
+              onClick={() => setIsNotifOpen(true)}
+              className="btn btn-ghost"
+              title="Notifications"
               style={{
-                background: 'var(--surface-bg)',
+                position: 'relative',
+                background: 'white',
                 border: '1px solid var(--surface-border)',
                 borderRadius: '50%',
-                width: 44,
-                height: 44,
+                width: 42,
+                height: 42,
+                padding: 0,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                color: '#f59e0b',
+                transition: 'transform 0.2s'
               }}
             >
-              <span className="material-symbols-outlined" style={{ color: 'var(--text-secondary)' }}>support_agent</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>notifications</span>
+              {pendingCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  width: 8,
+                  height: 8,
+                  backgroundColor: '#d32f2f',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 0 2px #fff'
+                }} />
+              )}
             </button>
           )}
         </div>
       </div>
 
       <TicketDrawer isOpen={isTicketOpen} onClose={() => setIsTicketOpen(false)} />
-      {(profile?.role === 'branch_manager' || profile?.role === 'service_manager') && (
+      {!isStudentOrTeacher && (
         <NotificationDrawer 
           isOpen={isNotifOpen} 
           onClose={() => setIsNotifOpen(false)} 

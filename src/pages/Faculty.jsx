@@ -13,29 +13,13 @@ const DEFAULT_SYLLABUS = [
   { batch: '9th Alpha', subject: 'Mathematics', teacher: 'Brijesh Prajapati', progress: 40, lastChapter: 'Polynomials' }
 ];
 
-// Faculty Management Modals and components will go here
-
 export default function Faculty() {
   const [activeTeachers, setActiveTeachers] = useState([]);
-  const [manageBatchesTeacher, setManageBatchesTeacher] = useState(null);
-  const [expandedCards, setExpandedCards] = useState({});
-
-  const toggleCard = (e, id) => {
-    e.stopPropagation();
-    setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // Faculty Profile Detail Modal State
-  const [selectedFaculty, setSelectedFaculty] = useState(null);
-  const [isEditingFaculty, setIsEditingFaculty] = useState(false);
-  const [facultyEditForm, setFacultyEditForm] = useState({});
   const [availableBatches, setAvailableBatches] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [syllabusList, setSyllabusList] = useState([]);
   const [grievances, setGrievances] = useState([]);
-  const [demos, setDemos] = useState([]);
-  const [parentFeedbacks, setParentFeedbacks] = useState([]);
   const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(false);
 
   // Syllabus progress update states
   const [showProgressModal, setShowProgressModal] = useState(false);
@@ -48,22 +32,6 @@ export default function Faculty() {
     teacherId: '',
     request: '',
     priority: 'Medium'
-  });
-
-  // Demo Schedule states
-  const [newDemo, setNewDemo] = useState({
-    studentName: '',
-    subject: 'Mathematics',
-    teacherId: '',
-    date: ''
-  });
-
-  // Parent Feedback CRM states
-  const [newFeedback, setNewFeedback] = useState({
-    studentId: '',
-    teacherId: '',
-    rating: 'Satisfied', // 'Satisfied' or 'Complaint'
-    notes: ''
   });
 
   // Timetable Maker State
@@ -136,32 +104,14 @@ export default function Faculty() {
       setGrievances(sorted);
     });
 
-    // 3. Listen to Demo Lectures
-    const qDemo = query(collection(db, 'demo_lectures'));
-    const unsubDemo = onSnapshot(qDemo, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const sorted = data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-      setDemos(sorted);
-    });
-
-    // 4. Fetch Admitted Students for parent feedbacks
+    // 4. Fetch Admitted Students for grievances target
     const qStu = query(collection(db, 'students'));
     const unsubStu = onSnapshot(qStu, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStudents(data);
       if (data.length > 0) {
-        setNewDemo(prev => ({ ...prev, teacherId: prev.teacherId || activeTeachers[0]?.id }));
-        setNewFeedback(prev => ({ ...prev, teacherId: prev.teacherId || activeTeachers[0]?.id }));
         setNewGrievance(prev => ({ ...prev, teacherId: prev.teacherId || activeTeachers[0]?.id }));
       }
-    });
-
-    // 5. Listen to Parent Feedbacks
-    const qFeed = query(collection(db, 'parent_feedbacks'));
-    const unsubFeed = onSnapshot(qFeed, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const sorted = data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-      setParentFeedbacks(sorted);
     });
 
     // 6. Set available batches statically from BATCH_DEF
@@ -177,20 +127,9 @@ export default function Faculty() {
       unsubSettings();
       unsubSyl();
       unsubGriev();
-      unsubDemo();
       unsubStu();
-      unsubFeed();
     };
   }, []);
-
-  const handleUpdateTeacherBatches = async (teacherId, newBatches) => {
-    try {
-      await updateDoc(doc(db, 'users', teacherId), { assignedBatches: newBatches });
-    } catch (err) {
-      console.error(err);
-      alert('Failed to update assigned batches.');
-    }
-  };
 
   const handleAddSubject = async () => {
     const newSub = prompt("Enter new subject name:");
@@ -277,29 +216,6 @@ export default function Faculty() {
     }
   };
 
-  const handleCreateDemo = async (e) => {
-    e.preventDefault();
-    if (!newDemo.studentName.trim() || !newDemo.date) return alert('Enter student name and demo date!');
-
-    try {
-      const targetTeacher = activeTeachers.find(t => t.id === newDemo.teacherId);
-      await addDoc(collection(db, 'demo_lectures'), {
-        studentName: newDemo.studentName.trim(),
-        subject: newDemo.subject,
-        teacherId: newDemo.teacherId,
-        teacherName: targetTeacher ? targetTeacher.fullName : 'Unknown',
-        date: newDemo.date,
-        status: 'Scheduled',
-        timestamp: serverTimestamp()
-      });
-      setNewDemo(prev => ({ ...prev, studentName: '', date: '' }));
-      alert('Demo lecture scheduled successfully!');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to schedule demo.');
-    }
-  };
-
   const handleUpdateCell = (slot, classroom, field, value, subField = null) => {
     setTimetableData(prev => {
       const slotData = prev[slot] || {};
@@ -345,335 +261,13 @@ export default function Faculty() {
     setPublishingTimetable(false);
   };
 
-  const handleToggleDemoStatus = async (id, currentStatus) => {
-    const nextStatus = currentStatus === 'Scheduled' ? 'Conducted' : 'Scheduled';
-    try {
-      await updateDoc(doc(db, 'demo_lectures', id), {
-        status: nextStatus
-      });
-    } catch (err) {
-      console.error(err);
-      alert('Failed to update status.');
-    }
-  };
-
-  const handleCreateFeedback = async (e) => {
-    e.preventDefault();
-    const { studentId, teacherId, rating, notes } = newFeedback;
-    if (!studentId || !teacherId || !notes.trim()) return alert('Select student, teacher and write call notes!');
-
-    const targetStudent = students.find(s => s.id === studentId);
-    const studentName = targetStudent ? targetStudent.studentName : 'Unknown Student';
-    const targetTeacher = activeTeachers.find(t => t.id === teacherId);
-    const teacherName = targetTeacher ? targetTeacher.fullName : 'Unknown Faculty';
-
-    try {
-      await addDoc(collection(db, 'parent_feedbacks'), {
-        studentId,
-        studentName,
-        teacherName,
-        rating,
-        notes: notes.trim(),
-        needsBranchManagerAttention: rating === 'Complaint',
-        date: new Date().toLocaleString(),
-        timestamp: serverTimestamp()
-      });
-      
-      setNewFeedback(prev => ({ ...prev, studentId: '', notes: '' }));
-      alert(`Parent evaluation logged! ${rating === 'Complaint' ? '⚠️ Escaled to Sumit Sir (Branch Manager) Dashboard.' : 'Successfully saved.'}`);
-    } catch (err) {
-      console.error('Error logging parent feedback', err);
-      alert('Failed to save parent feedback.');
-    }
-  };
-
-  // Check if current demo teacher selection is senior
-  const selectedTeacher = activeTeachers.find(t => t.id === newDemo.teacherId);
-  const isSelectedTeacherSenior = selectedTeacher ? selectedTeacher.isSenior : true;
-
   return (
     <div className="faculty-container">
       <div className="faculty-header-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1>Faculty Coordinator Hub</h1>
-          <p>Logged in as Rohan Sir (Service Manager) • Manage teacher schedules, demo audits, and evaluate calling feedback logs.</p>
+          <h1>Crafting Table</h1>
+          <p>Logged in as Rohan Sir (Service Manager) • Manage master timetables and center coordination.</p>
         </div>
-      </div>
-
-      {/* Grid: Teachers Cards */}
-      <h2 className="section-header-title">Active Faculty Members</h2>
-      <div className="faculty-cards-grid">
-        {activeTeachers.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)' }}>No teachers created yet. Please use the Manage Teachers tab to add faculty.</p>
-        ) : activeTeachers.map(teacher => (
-          <div key={teacher.id} className={`portal-card teacher-profile-card ${teacher.isSenior ? 'senior' : 'junior'}`} onClick={() => {
-            setSelectedFaculty(teacher);
-            setIsEditingFaculty(false);
-          }} style={{ cursor: 'pointer' }}>
-            {/* Restructured Card Layout */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <div className="teacher-avatar-circle" style={{ flexShrink: 0 }}>{(teacher.fullName?.[0] || 'T').toUpperCase()}</div>
-              <div className="teacher-info-block" style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '4px' }}>
-                  <h3 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{teacher.fullName}</h3>
-                  <span className={`badge-seniority ${teacher.isSenior ? 'senior' : 'junior'}`}>
-                    {teacher.isSenior ? 'Senior' : 'Junior'}
-                  </span>
-                </div>
-                <p className="subjects" style={{ margin: '0 0 2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{teacher.subjects}</p>
-                <p className="email" style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{teacher.email}</p>
-              </div>
-              <button 
-                className="btn-ghost btn-sm" 
-                onClick={(e) => toggleCard(e, teacher.id)} 
-                style={{ padding: '4px', alignSelf: 'flex-start', flexShrink: 0, marginTop: '-4px', marginRight: '-4px', borderRadius: '50%' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '24px', color: 'var(--text-secondary)' }}>
-                  {expandedCards[teacher.id] ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
-                </span>
-              </button>
-            </div>
-
-            {/* Batches Wrapper */}
-            {expandedCards[teacher.id] && (
-              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {(teacher.assignedBatches || []).length === 0 ? (
-                <span style={{ fontSize: '12px', color: 'var(--status-error)' }}>No batches assigned</span>
-              ) : (
-                teacher.assignedBatches.map(b => {
-                  const progressData = syllabusList.find(s => s.teacherId === teacher.id && s.batch === b);
-                  const progressVal = progressData ? progressData.progress : 0;
-                  const logVal = progressData?.lastChapter ? progressData.lastChapter : 'No log yet';
-                  return (
-                    <div key={b} style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--surface-base)', padding: '8px 12px', borderRadius: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="badge badge-branch-manager" style={{ fontSize: '10px', padding: '2px 6px' }}>{b.toUpperCase()}</span>
-                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--brand-primary)' }}>{progressVal}%</span>
-                      </div>
-                      <div style={{ width: '100%', height: '4px', background: '#ddd', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ width: `${progressVal}%`, height: '100%', background: 'var(--brand-primary)' }}></div>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        Log: {logVal}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            )}
-
-            {/* Actions Footer */}
-            <div style={{ marginTop: '16px', display: 'flex', gap: '8px', borderTop: '1px solid var(--surface-border)', paddingTop: '16px' }} onClick={e => e.stopPropagation()}>
-              <button className="btn-ghost btn-sm" onClick={() => setManageBatchesTeacher(teacher)} style={{ flex: 1, justifyContent: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_square</span> Manage Batches
-              </button>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', background: 'var(--surface-bg)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--surface-border)', fontSize: '11px', alignSelf: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--status-success)', fontWeight: 600 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 12 }}>check_circle</span> Active
-                </div>
-                <div><strong>Pass:</strong> {teacher.portalPassword || 'Hidden'}</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Grid: Forms & Action Panels */}
-      <div className="faculty-dashboard-grid">
-        
-        {/* Panel 1: Parent Feedback Evaluation CRM */}
-        <div className="portal-card faculty-card-panel">
-          <h2>📞 Parent Calling Feedback CRM</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginBottom: '20px' }}>
-            Record parent reviews on teacher classes. Complaints escalate directly to Sumit Sir next day.
-          </p>
-          <form onSubmit={handleCreateFeedback}>
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label className="form-label">Evaluate Student's Class</label>
-                <select 
-                  value={newFeedback.studentId}
-                  onChange={e => setNewFeedback({ ...newFeedback, studentId: e.target.value })}
-                  className="portal-select"
-                  required
-                >
-                  <option value="">-- Select Student --</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.studentName} ({s.standard || 'Admitted'})</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">For Faculty</label>
-                <select 
-                  value={newFeedback.teacherId}
-                  onChange={e => setNewFeedback({ ...newFeedback, teacherId: e.target.value })}
-                  className="portal-select"
-                  required
-                >
-                  <option value="">-- Select Teacher --</option>
-                  {activeTeachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Evaluation Rating</label>
-              <select 
-                value={newFeedback.rating}
-                onChange={e => setNewFeedback({ ...newFeedback, rating: e.target.value })}
-                className="portal-select"
-              >
-                <option value="Satisfied">Satisfied / Good Feedback</option>
-                <option value="Complaint">Complaint (Needs Sumit Sir Escalation)</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Parent Call Notes</label>
-              <textarea
-                rows={2}
-                placeholder="Log home feedback details (e.g. Student feels pace is fast in science class)"
-                value={newFeedback.notes}
-                onChange={e => setNewFeedback({ ...newFeedback, notes: e.target.value })}
-                className="portal-input"
-                required
-              />
-            </div>
-
-            <button type="submit" className="btn btn-brand" style={{ width: '100%', marginTop: '8px' }}>
-              Save Calling Log
-            </button>
-          </form>
-
-          {/* Feedback Feed List */}
-          <div className="grievance-feed-list" style={{ marginTop: '24px' }}>
-            {parentFeedbacks.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No parent feedbacks recorded.</p>
-            ) : (
-              parentFeedbacks.map(f => (
-                <div key={f.id} className={`grievance-item-card ${f.rating === 'Complaint' ? 'complaint-escalated' : ''}`}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <strong>Student: {f.studentName}</strong>
-                    <span className={`status-tag ${f.rating === 'Complaint' ? 'pending' : 'resolved'}`}>
-                      {f.rating === 'Complaint' ? '⚠️ COMPLAINT' : 'SATISFIED'}
-                    </span>
-                  </div>
-                  <p><strong>Faculty:</strong> {f.teacherName}</p>
-                  <p style={{ marginTop: '4px', fontStyle: 'italic' }}>"{f.notes}"</p>
-                  {f.rating === 'Complaint' && (
-                    <div className="escalation-alert-label">
-                      📢 Escalated to Sumit Sir (Branch Manager) Dashboard
-                    </div>
-                  )}
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>Logged: {f.date}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Panel 2: Demo Coordinator Schedule */}
-        <div className="portal-card faculty-card-panel">
-          <h2>📅 Schedule Student Demo Lecture</h2>
-          <form onSubmit={handleCreateDemo}>
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label className="form-label">Student Name</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Rahul Patil"
-                  value={newDemo.studentName}
-                  onChange={e => setNewDemo({ ...newDemo, studentName: e.target.value })}
-                  className="portal-input"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Subject</label>
-                <select 
-                  value={newDemo.subject}
-                  onChange={e => setNewDemo({ ...newDemo, subject: e.target.value })}
-                  className="portal-select"
-                >
-                  <option value="Mathematics">Mathematics</option>
-                  <option value="Science">Science</option>
-                  <option value="English">English</option>
-                  <option value="Social Science">Social Science</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label className="form-label">Assign Teacher</label>
-                <select 
-                  value={newDemo.teacherId}
-                  onChange={e => setNewDemo({ ...newDemo, teacherId: e.target.value })}
-                  className="portal-select"
-                  required
-                >
-                  <option value="">-- Select Teacher --</option>
-                  {activeTeachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Demo Date & Time</label>
-                <input 
-                  type="datetime-local"
-                  value={newDemo.date}
-                  onChange={e => setNewDemo({ ...newDemo, date: e.target.value })}
-                  className="portal-input"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Seniority Warning Guard */}
-            {!isSelectedTeacherSenior && (
-              <div className="teacher-seniority-warning">
-                <span className="material-symbols-outlined">warning</span>
-                <span>Warning: Demo lectures should ideally be assigned to Senior/Regular faculty only!</span>
-              </div>
-            )}
-
-            <button type="submit" className="btn btn-brand" style={{ width: '100%', marginTop: '8px' }}>
-              Schedule Demo Class
-            </button>
-          </form>
-
-          {/* Demos List */}
-          <div className="demo-schedule-list">
-            {demos.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '16px' }}>No demo classes scheduled.</p>
-            ) : (
-              demos.map(d => (
-                <div key={d.id} className="demo-item-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <strong>Student: {d.studentName}</strong>
-                    <span className={`status-tag ${d.status.toLowerCase()}`}>{d.status}</span>
-                  </div>
-                  <p>Subject: {d.subject} • Faculty: {d.teacherName}</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Scheduled: {new Date(d.date).toLocaleString()}
-                  </p>
-                  
-                  <div style={{ textAlign: 'right', marginTop: '10px' }}>
-                    <button 
-                      className={`btn btn-sm ${d.status === 'Scheduled' ? 'btn-brand' : 'btn-ghost'}`}
-                      onClick={() => handleToggleDemoStatus(d.id, d.status)}
-                    >
-                      {d.status === 'Scheduled' ? 'Mark Conducted' : 'Re-Schedule'}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
       </div>
 
       {/* Timetable Maker Section */}
@@ -1065,200 +659,6 @@ export default function Faculty() {
               >
                 Update Ledger
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manage Batches Modal */}
-      {manageBatchesTeacher && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setManageBatchesTeacher(null); }}>
-          <div className="modal-box">
-            <h2 className="modal-title">Manage Batches for {manageBatchesTeacher.fullName}</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>Select the batches this teacher is responsible for.</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto', background: 'var(--surface-bg)', padding: '16px', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
-              {availableBatches.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No batches available in the database.</p>}
-              {availableBatches.map(batch => {
-                const isAssigned = (manageBatchesTeacher.assignedBatches || []).includes(batch);
-                return (
-                  <label key={batch} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary)' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={isAssigned}
-                      onChange={(e) => {
-                        let newBatches = [...(manageBatchesTeacher.assignedBatches || [])];
-                        if (e.target.checked) {
-                          newBatches.push(batch);
-                        } else {
-                          newBatches = newBatches.filter(b => b !== batch);
-                        }
-                        setManageBatchesTeacher({ ...manageBatchesTeacher, assignedBatches: newBatches });
-                      }}
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                    />
-                    {batch}
-                  </label>
-                );
-              })}
-            </div>
-
-            <div className="modal-footer" style={{ marginTop: 24 }}>
-              <button className="btn btn-ghost" onClick={() => setManageBatchesTeacher(null)}>Cancel</button>
-              <button 
-                className="btn btn-brand" 
-                onClick={() => {
-                  handleUpdateTeacherBatches(manageBatchesTeacher.id, manageBatchesTeacher.assignedBatches || []);
-                  setManageBatchesTeacher(null);
-                }}
-              >
-                Save Batch Assignments
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Faculty Profile Full Screen Modal */}
-      {selectedFaculty && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setSelectedFaculty(null); }}>
-          <div className="modal-box" style={{ maxWidth: '800px', width: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid var(--surface-border)', paddingBottom: '16px' }}>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <div className="teacher-avatar-circle" style={{ width: '64px', height: '64px', fontSize: '28px' }}>
-                  {(selectedFaculty.fullName?.[0] || 'T').toUpperCase()}
-                </div>
-                <div>
-                  <h2 className="modal-title" style={{ margin: 0 }}>{selectedFaculty.fullName}</h2>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>school</span>
-                    <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>{selectedFaculty.subjects}</span>
-                    <span className={`badge-seniority ${selectedFaculty.isSenior ? 'senior' : 'junior'}`} style={{ marginLeft: '8px' }}>
-                      {selectedFaculty.isSenior ? 'Senior' : 'Junior'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                {!isEditingFaculty ? (
-                  <button className="btn btn-ghost" onClick={() => {
-                    setFacultyEditForm({
-                      fullName: selectedFaculty.fullName,
-                      email: selectedFaculty.email,
-                      mobile: selectedFaculty.mobile,
-                      subjects: selectedFaculty.subjects,
-                      isSenior: selectedFaculty.isSenior
-                    });
-                    setIsEditingFaculty(true);
-                  }}>
-                    <span className="material-symbols-outlined">edit</span> Edit Profile
-                  </button>
-                ) : (
-                  <button className="btn btn-ghost" onClick={() => setIsEditingFaculty(false)}>
-                    <span className="material-symbols-outlined">close</span> Cancel
-                  </button>
-                )}
-                <button className="btn-icon" onClick={() => setSelectedFaculty(null)}>
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="modal-body">
-              {!isEditingFaculty ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                  {/* View Mode */}
-                  <div>
-                    <h3 className="section-header-title">Personal Details</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Email ID</div>
-                        <div style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{selectedFaculty.email}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Mobile Number</div>
-                        <div style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{selectedFaculty.mobile || 'Not Provided'}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Role</div>
-                        <div style={{ fontSize: '15px', color: 'var(--text-primary)', textTransform: 'capitalize' }}>{selectedFaculty.role}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="section-header-title">Academic & Portal</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Assigned Batches</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {(selectedFaculty.assignedBatches || []).length === 0 ? (
-                            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>None assigned</span>
-                          ) : (
-                            selectedFaculty.assignedBatches.map(b => (
-                              <span key={b} className="badge badge-branch-manager" style={{ padding: '4px 10px' }}>{b}</span>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Portal Status</div>
-                        {selectedFaculty.portalGenerated ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--status-success)', fontWeight: 600 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span> Active (Pass: {selectedFaculty.portalPassword || 'Hidden'})
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--status-warning)', fontWeight: 600 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>pending</span> Not Generated
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {/* Edit Mode */}
-                  <h3 className="section-header-title">Edit Faculty Details</h3>
-                  <div className="form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Full Name</label>
-                      <input className="portal-input" value={facultyEditForm.fullName} onChange={e => setFacultyEditForm({...facultyEditForm, fullName: e.target.value})} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Mobile Number</label>
-                      <input className="portal-input" value={facultyEditForm.mobile} onChange={e => setFacultyEditForm({...facultyEditForm, mobile: e.target.value})} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Subjects Taught</label>
-                      <input className="portal-input" value={facultyEditForm.subjects} onChange={e => setFacultyEditForm({...facultyEditForm, subjects: e.target.value})} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Seniority</label>
-                      <select className="portal-select" value={facultyEditForm.isSenior ? 'true' : 'false'} onChange={e => setFacultyEditForm({...facultyEditForm, isSenior: e.target.value === 'true'})}>
-                        <option value="true">Senior Faculty</option>
-                        <option value="false">Junior Faculty</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="modal-footer" style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '16px' }}>
-                    <button className="btn btn-brand" onClick={async () => {
-                      try {
-                        await updateDoc(doc(db, 'users', selectedFaculty.id), {
-                          fullName: facultyEditForm.fullName,
-                          mobile: facultyEditForm.mobile,
-                          subjects: facultyEditForm.subjects,
-                          isSenior: facultyEditForm.isSenior
-                        });
-                        // Update local state to reflect changes instantly without re-fetching entire list
-                        setSelectedFaculty({...selectedFaculty, ...facultyEditForm});
-                        setIsEditingFaculty(false);
-                      } catch (err) {
-                        alert("Failed to update profile: " + err.message);
-                      }
-                    }}>Save Changes</button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

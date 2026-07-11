@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '../firebase';
 import { updateDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,7 +9,7 @@ import './TicketDrawer.css';
 export default function NotificationDrawer({ isOpen, onClose, notifications = [], onDismiss }) {
   const { profile } = useAuth();
 
-  return (
+  return createPortal(
     <>
       <div 
         className={`ticket-drawer-overlay ${isOpen ? 'open' : ''}`}
@@ -191,6 +192,7 @@ export default function NotificationDrawer({ isOpen, onClose, notifications = []
 
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

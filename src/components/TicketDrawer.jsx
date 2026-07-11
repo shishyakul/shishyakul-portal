@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeToInbox, subscribeToSent, createTickets, updateTicketStatus, updateTicketProgress, addTicketRemark } from '../services/tickets';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -251,7 +252,7 @@ export default function TicketDrawer({ isOpen, onClose }) {
     }
   };
 
-  return (
+  return createPortal(
     <>
       <div className={`ticket-drawer-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} />
       <div className={`ticket-drawer ${isOpen ? 'open' : ''}`}>
@@ -362,6 +363,7 @@ export default function TicketDrawer({ isOpen, onClose }) {
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
