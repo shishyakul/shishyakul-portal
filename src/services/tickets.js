@@ -1,4 +1,4 @@
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export const subscribeToInbox = (userRole, userId, callback) => {
@@ -37,6 +37,8 @@ export const createTickets = async (senderUid, senderName, senderRole, targetRol
       subject,
       message,
       status: 'pending',
+      progress: 0,
+      remarks: [],
       createdAt: serverTimestamp()
     });
   });
@@ -48,5 +50,25 @@ export const updateTicketStatus = async (ticketId, newStatus) => {
   const ticketRef = doc(db, 'portal_tickets', ticketId);
   await updateDoc(ticketRef, {
     status: newStatus
+  });
+};
+
+export const updateTicketProgress = async (ticketId, status, progress) => {
+  const ticketRef = doc(db, 'portal_tickets', ticketId);
+  await updateDoc(ticketRef, {
+    status: status,
+    progress: progress
+  });
+};
+
+export const addTicketRemark = async (ticketId, senderUid, senderName, message) => {
+  const ticketRef = doc(db, 'portal_tickets', ticketId);
+  await updateDoc(ticketRef, {
+    remarks: arrayUnion({
+      senderUid,
+      senderName,
+      message,
+      timestamp: new Date().toISOString()
+    })
   });
 };

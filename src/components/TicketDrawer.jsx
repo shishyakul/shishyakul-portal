@@ -1,22 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { subscribeToInbox, subscribeToSent, createTickets, updateTicketStatus } from '../services/tickets';
+import { subscribeToInbox, subscribeToSent, createTickets, updateTicketStatus, updateTicketProgress, addTicketRemark } from '../services/tickets';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import './TicketDrawer.css';
 
 const PORTAL_ROLES = [
-  { id: 'admin', label: 'System Admin' },
-  { id: 'branch_manager', label: 'Branch Manager' },
-  { id: 'service_manager', label: 'Service Manager' },
-  { id: 'front_desk_manager', label: 'Front Desk' },
   { id: 'inventory_manager', label: 'Inventory Manager' },
+  { id: 'front_desk_manager', label: 'Front Desk' },
+  { id: 'admin', label: 'System Admin' },
+  { id: 'service_manager', label: 'Service Manager' },
+  { id: 'branch_manager', label: 'Branch Manager' },
   { id: 'teacher', label: 'Teacher' }
 ];
 
 const formatStatus = (status) => {
+  if (status === 'completed') return 'Completed';
+  if (status === 'in_process') return 'In Process';
   if (status === 'seen') return 'Seen';
   return 'Pending';
+};
+
+const getStatusColor = (status) => {
+  if (status === 'completed') return '#388e3c'; // Green
+  if (status === 'in_process') return '#fbc02d'; // Yellow
+  if (status === 'seen') return '#1976d2'; // Blue
+  return '#d32f2f'; // Red (Pending)
 };
 
 const formatDate = (timestamp) => {
@@ -25,6 +34,122 @@ const formatDate = (timestamp) => {
     return timestamp.toDate().toLocaleDateString();
   }
   return 'Just now';
+};
+
+const TicketItem = ({ ticket, isInbox, getRoleLabel, user, profile }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [remarkText, setRemarkText] = useState('');
+  
+  const handleProgressChange = async (newStatus, newProgress) => {
+    await updateTicketProgress(ticket.id, newStatus, newProgress);
+  };
+  
+  const handleAddRemark = async (e) => {
+    e.preventDefault();
+    if (!remarkText.trim()) return;
+    await addTicketRemark(ticket.id, user.uid, profile.fullName || profile.displayName || 'User', remarkText);
+    setRemarkText('');
+  };
+
+  return (
+    <div className={`ticket-item status-${ticket.status}`}>
+      <div className="ticket-item-header" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
+        <div className="ticket-sender" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="material-symbols-outlined" style={{ color: isInbox ? 'var(--brand-primary)' : 'var(--text-muted)' }}>
+            {isInbox ? 'person' : 'forward_to_inbox'}
+          </span>
+          <div>
+            {isInbox ? (
+              <>
+                <strong style={{ display: 'block', fontSize: 14 }}>{ticket.senderName}</strong>
+                <small className="ticket-item-dept">{getRoleLabel(ticket.senderRole)}</small>
+              </>
+            ) : (
+              <strong style={{ fontSize: 14 }}>To: {getRoleLabel(ticket.targetRole)}</strong>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="ticket-item-date">{formatDate(ticket.createdAt)}</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-muted)' }}>
+            {expanded ? 'expand_less' : 'expand_more'}
+          </span>
+        </div>
+      </div>
+      <div className="ticket-item-title" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>{ticket.subject}</div>
+      <div className="ticket-item-message">{ticket.message}</div>
+      
+      <div className="ticket-item-footer">
+        <span className={`status-badge ${ticket.status}`}>
+          {formatStatus(ticket.status)} {ticket.status === 'in_process' && `(${ticket.progress || 0}%)`}
+        </span>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
+          {isInbox && (
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>UPDATE STATUS</label>
+              <select 
+                style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid var(--border-color)', fontSize: 13 }}
+                value={ticket.status}
+                onChange={(e) => handleProgressChange(e.target.value, ticket.progress || 0)}
+              >
+                <option value="pending">Pending</option>
+                <option value="seen">Seen</option>
+                <option value="in_process">In Process</option>
+                <option value="completed">Completed</option>
+              </select>
+              
+              {ticket.status === 'in_process' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                  <input 
+                    type="range" 
+                    min="0" max="100" step="5"
+                    value={ticket.progress || 0}
+                    onChange={(e) => handleProgressChange(ticket.status, parseInt(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{ticket.progress || 0}%</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>REMARKS THREAD</label>
+            <div style={{ maxHeight: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {ticket.remarks && ticket.remarks.length > 0 ? (
+                ticket.remarks.map((rmk, idx) => (
+                  <div key={idx} style={{ background: rmk.senderUid === user.uid ? 'rgba(253,180,42,0.1)' : 'var(--bg-color)', padding: 10, borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <strong style={{ color: rmk.senderUid === user.uid ? 'var(--brand-primary)' : 'var(--text-main)' }}>{rmk.senderName}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(rmk.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div>{rmk.message}</div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>No remarks yet.</div>
+              )}
+            </div>
+            <form onSubmit={handleAddRemark} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input 
+                type="text" 
+                value={remarkText}
+                onChange={e => setRemarkText(e.target.value)}
+                placeholder="Type a reply..."
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 20, border: '1px solid var(--border-color)', fontSize: 13 }}
+              />
+              <button type="submit" disabled={!remarkText.trim()} style={{ background: 'var(--brand-primary)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function TicketDrawer({ isOpen, onClose }) {
@@ -152,6 +277,9 @@ export default function TicketDrawer({ isOpen, onClose }) {
           >
             Compose
           </button>
+          <div className="ticket-legend" title="Pending: Red&#10;In Process: Yellow&#10;Seen: Blue&#10;Completed: Green" style={{ display: 'flex', alignItems: 'center', padding: '0 16px', cursor: 'help', color: 'var(--text-muted)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
+          </div>
         </div>
 
         <div className="ticket-content">
@@ -211,31 +339,7 @@ export default function TicketDrawer({ isOpen, onClose }) {
                 <div className="empty-state">No incoming requests.</div>
               ) : (
                 inboxTickets.map(ticket => (
-                  <div key={ticket.id} className={`ticket-item status-${ticket.status}`}>
-                    <div className="ticket-item-header">
-                      <div className="ticket-sender" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>person</span>
-                        <div>
-                          <strong style={{ display: 'block', fontSize: 14 }}>{ticket.senderName}</strong>
-                          <small className="ticket-item-dept">{getRoleLabel(ticket.senderRole)}</small>
-                        </div>
-                      </div>
-                      <span className="ticket-item-date">{formatDate(ticket.createdAt)}</span>
-                    </div>
-                    <div className="ticket-item-title">{ticket.subject}</div>
-                    <div className="ticket-item-message">{ticket.message}</div>
-                    <div className="ticket-item-footer">
-                      <span className={`status-badge ${ticket.status}`}>
-                        {formatStatus(ticket.status)}
-                      </span>
-                      <button 
-                        className="btn-ghost btn-sm"
-                        onClick={() => handleUpdateStatus(ticket.id, ticket.status)}
-                      >
-                        {ticket.status === 'seen' ? 'Mark Unseen' : 'Mark as Seen'}
-                      </button>
-                    </div>
-                  </div>
+                  <TicketItem key={ticket.id} ticket={ticket} isInbox={true} getRoleLabel={getRoleLabel} user={user} profile={profile} />
                 ))
               )}
             </div>
@@ -247,24 +351,7 @@ export default function TicketDrawer({ isOpen, onClose }) {
                 <div className="empty-state">No sent requests.</div>
               ) : (
                 sentTickets.map(ticket => (
-                  <div key={ticket.id} className={`ticket-item status-${ticket.status}`}>
-                    <div className="ticket-item-header">
-                      <div className="ticket-sender" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span className="material-symbols-outlined" style={{ color: 'var(--text-muted)' }}>forward_to_inbox</span>
-                        <div>
-                          <strong style={{ fontSize: 14 }}>To: {getRoleLabel(ticket.targetRole)}</strong>
-                        </div>
-                      </div>
-                      <span className="ticket-item-date">{formatDate(ticket.createdAt)}</span>
-                    </div>
-                    <div className="ticket-item-title">{ticket.subject}</div>
-                    <div className="ticket-item-message">{ticket.message}</div>
-                    <div className="ticket-item-footer">
-                      <span className={`status-badge ${ticket.status}`}>
-                        {formatStatus(ticket.status)}
-                      </span>
-                    </div>
-                  </div>
+                  <TicketItem key={ticket.id} ticket={ticket} isInbox={false} getRoleLabel={getRoleLabel} user={user} profile={profile} />
                 ))
               )}
             </div>

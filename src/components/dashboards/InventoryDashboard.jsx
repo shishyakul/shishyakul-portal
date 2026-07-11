@@ -62,7 +62,7 @@ export default function InventoryDashboard({ profile }) {
       </div>
 
       {/* Quick Access Buttons */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid-auto-200" style={{ gap: '16px', marginBottom: '24px' }}>
         <button className="portal-card" style={{ padding: '20px', cursor: 'pointer', textAlign: 'left', border: '1px solid var(--brand-primary)', background: 'linear-gradient(135deg, rgba(253,180,42,0.1), transparent)' }} onClick={() => navigate('/inventory')}>
           <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)', marginBottom: '8px' }}>inventory_2</span>
           <h3 style={{ fontSize: 16 }}>Stock Catalog</h3>
@@ -75,7 +75,7 @@ export default function InventoryDashboard({ profile }) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+      <div className="grid-1-2" style={{ gap: '24px' }}>
         
         {/* Left Column: Alerts & Low Stock */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

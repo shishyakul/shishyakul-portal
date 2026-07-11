@@ -218,6 +218,27 @@
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.ticket-item.status-pending {
+  background: rgba(211, 47, 47, 0.15);
+  border-color: rgba(211, 47, 47, 0.4);
+}
+
+.ticket-item.status-in_process {
+  background: rgba(253, 192, 45, 0.15);
+  border-color: rgba(253, 192, 45, 0.4);
+}
+
+.ticket-item.status-seen {
+  background: rgba(25, 118, 210, 0.15);
+  border-color: rgba(25, 118, 210, 0.4);
+}
+
+.ticket-item.status-completed {
+  background: rgba(56, 142, 60, 0.15);
+  border-color: rgba(56, 142, 60, 0.4);
 }
 
 .ticket-item-header {
@@ -270,18 +291,23 @@
 }
 
 .status-badge.pending {
-  background: rgba(253, 180, 42, 0.1);
-  color: #fdb42a;
+  background: rgba(211, 47, 47, 0.1);
+  color: #d32f2f;
 }
 
-.status-badge.in_progress {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+.status-badge.in_process {
+  background: rgba(253, 192, 45, 0.1);
+  color: #fbc02d;
+}
+
+.status-badge.seen {
+  background: rgba(25, 118, 210, 0.1);
+  color: #1976d2;
 }
 
 .status-badge.completed {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background: rgba(56, 142, 60, 0.1);
+  color: #388e3c;
 }
 
 .action-btn {

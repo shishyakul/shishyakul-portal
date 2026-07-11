@@ -81,7 +81,7 @@ export default function FrontendDeskDashboard({ profile }) {
       </div>
 
       {/* Quick Access Buttons */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid-auto-200" style={{ gap: '16px', marginBottom: '24px' }}>
         <button className="portal-card" style={{ padding: '20px', cursor: 'pointer', textAlign: 'left', border: '1px solid var(--brand-primary)', background: 'linear-gradient(135deg, rgba(253,180,42,0.1), transparent)' }} onClick={() => navigate('/enquiries')}>
           <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)', marginBottom: '8px' }}>person_add</span>
           <h3 style={{ fontSize: 16 }}>New Enquiry</h3>
@@ -104,7 +104,7 @@ export default function FrontendDeskDashboard({ profile }) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '24px' }}>
+      <div className="grid-2-1" style={{ gap: '24px', marginBottom: '24px' }}>
         
         {/* Left Column: Alerts & Attendance */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

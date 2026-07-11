@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, onSnapshot, query } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -21,6 +21,7 @@ export default function AdminDashboard({ profile }) {
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [lectureReports, setLectureReports] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -184,7 +185,7 @@ export default function AdminDashboard({ profile }) {
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>warning</span>
             Critical: 2-Day Consecutive Absentees (Follow-up Required)
           </h3>
-          <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+          <div className="grid-auto-300" style={{ gap: '8px' }}>
             {consecutiveAbsentees.map(student => (
               <div key={student.id} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -308,7 +309,7 @@ export default function AdminDashboard({ profile }) {
           {lectureReports.length === 0 ? (
             <div className="empty-state">No lecture reports submitted yet.</div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            <div className="grid-auto-300">
               {lectureReports.slice(0, 10).map((rep) => (
                 <div key={rep.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 8, borderLeft: '4px solid #10b981', borderTop: '1px solid var(--surface-border)', borderRight: '1px solid var(--surface-border)', borderBottom: '1px solid var(--surface-border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -397,6 +398,8 @@ export default function AdminDashboard({ profile }) {
             </table>
           )}
         </div>
+
+
 
         {/* Quick Actions */}
         <div className="portal-card">

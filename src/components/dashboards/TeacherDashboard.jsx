@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, setDoc, arrayUnion, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchTeacherPerformanceScore, fetchBatchAnalytics } from '../../utils/performanceMetrics';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label } from 'recharts';
+import TicketDrawer from '../TicketDrawer';
+import { subscribeToInbox } from '../../services/tickets';
 function StudentFeedbackModal({ student, teacherName, teacherId, onClose }) {
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
@@ -208,11 +211,64 @@ function PostLectureModal({ classData, teacherName, teacherId, onClose }) {
 }
 const SUBJECTS = ['Mathematics', 'Science', 'SST', 'English', 'Hindi', 'Marathi', 'Sanskrit', 'Physics', 'Chemistry', 'Biology', 'Computer', 'Economics', 'Accounts'];
 
+const MOTIVATIONAL_QUOTES = [
+  "The influence of a good teacher can never be erased.",
+  "Education is the most powerful weapon which you can use to change the world.",
+  "A good teacher can inspire hope, ignite the imagination, and instill a love of learning.",
+  "Teaching is the one profession that creates all other professions.",
+  "The beautiful thing about learning is that no one can take it away from you.",
+  "It is the supreme art of the teacher to awaken joy in creative expression and knowledge.",
+  "To teach is to touch a life forever."
+];
+
 export default function TeacherDashboard({ profile }) {
   const { user } = useAuth();
   const teacherId = user?.uid || profile?.id;
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [isTicketOpen, setIsTicketOpen] = useState(false);
+  
+  // Ticket Notification Logic
+  const [hasNewTicketAlert, setHasNewTicketAlert] = useState(false);
+  const prevTicketCount = useRef(-1);
+
+  useEffect(() => {
+    if (isTicketOpen) {
+      setHasNewTicketAlert(false);
+    }
+  }, [isTicketOpen]);
+
+  useEffect(() => {
+    if (!profile?.role || !user?.uid) return;
+    return subscribeToInbox(profile.role, user.uid, (tickets) => {
+       let count = tickets.length;
+       tickets.forEach(t => {
+          if (t.remarks) count += t.remarks.length;
+       });
+       
+       if (prevTicketCount.current === -1) {
+          if (tickets.some(t => t.status === 'pending')) {
+             setHasNewTicketAlert(true);
+          }
+       } else if (count > prevTicketCount.current) {
+          if (!isTicketOpen) {
+            setHasNewTicketAlert(true);
+          }
+       }
+       prevTicketCount.current = count;
+    });
+  }, [profile, user, isTicketOpen]);
+
+  const [showQuote, setShowQuote] = useState(false);
+  const quoteOfTheDay = MOTIVATIONAL_QUOTES[Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000) % MOTIVATIONAL_QUOTES.length];
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowQuote(true);
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [activeTab, setActiveTab] = useState(() => {
     return location.hash.replace('#', '') || 'home';
@@ -263,6 +319,164 @@ export default function TeacherDashboard({ profile }) {
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
 
   const [feedbackStudent, setFeedbackStudent] = useState(null);
+  const [teacherAttendanceRecords, setTeacherAttendanceRecords] = useState([]);
+
+  // Fetch Teacher Attendance from Firebase
+  useEffect(() => {
+    if (!teacherId) return;
+    const q = query(
+      collection(db, 'teacher_attendance'),
+      where('teacherId', '==', teacherId)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // sort by date descending
+      records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setTeacherAttendanceRecords(records);
+    });
+    return () => unsub();
+  }, [teacherId]);
+
+  const injectFakeAttendanceData = async () => {
+    const fakeRecords = [
+      { teacherId, date: new Date().toISOString().split('T')[0], punchIn: '09:45 AM', punchOut: '--:-- --', status: 'On Time', totalHours: '--', roleCompleted: false },
+      { teacherId, date: new Date(Date.now() - 86400000).toISOString().split('T')[0], punchIn: '09:50 AM', punchOut: '06:15 PM', status: 'On Time', totalHours: '8h 25m', roleCompleted: true },
+      { teacherId, date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0], punchIn: '10:15 AM', punchOut: '06:30 PM', status: 'Late', totalHours: '8h 15m', roleCompleted: true },
+      { teacherId, date: new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0], punchIn: '09:40 AM', punchOut: '06:00 PM', status: 'On Time', totalHours: '8h 20m', roleCompleted: false },
+      { teacherId, date: new Date(Date.now() - 86400000 * 4).toISOString().split('T')[0], punchIn: '09:55 AM', punchOut: '06:05 PM', status: 'On Time', totalHours: '8h 10m', roleCompleted: true },
+    ];
+    for (const rec of fakeRecords) {
+      await addDoc(collection(db, 'teacher_attendance'), rec);
+    }
+    alert('Fake records injected!');
+  };
+  
+  // --- Teacher Attendance Calendar State ---
+  const [calendarDate, setCalendarDate] = useState(new Date());
+
+  const [isStatsFlipped, setIsStatsFlipped] = useState(false);
+  const [isHolidayStatsFlipped, setIsHolidayStatsFlipped] = useState(false);
+
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leaveFormData, setLeaveFormData] = useState({ type: 'summer', startDate: '', endDate: '', reason: '', days: '' });
+  const [leaveSaving, setLeaveSaving] = useState(false);
+
+  useEffect(() => {
+    if (!teacherId) return;
+    const q = query(collection(db, 'leave_requests'), where('teacherId', '==', teacherId));
+    const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      records.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+      setLeaveRequests(records);
+    });
+    return () => unsub();
+  }, [teacherId]);
+
+  // --- Dynamic Holiday Analytics ---
+  const yearlyHolidayStats = {
+    summer: { quota: 15, used: 0, label: 'Summer Vacation', color: '#fbc02d' },
+    sick: { quota: 5, used: 0, label: 'Sick Leave', color: '#e53935' },
+    festival: { quota: 5, used: 0, label: 'Festival', color: '#8e24aa' },
+    travel: { quota: 5, used: 0, label: 'Travel + Village', color: '#039be5' },
+  };
+
+  leaveRequests.forEach(req => {
+    if (req.status === 'approved' && yearlyHolidayStats[req.type]) {
+      yearlyHolidayStats[req.type].used += parseInt(req.totalDays || 0);
+    }
+  });
+
+  const totalHolidaysQuota = 30;
+  const totalHolidaysUsed = Object.values(yearlyHolidayStats).reduce((acc, curr) => acc + curr.used, 0);
+  const totalHolidaysLeft = totalHolidaysQuota - totalHolidaysUsed;
+  
+  const monthlyHolidayBreakdownMap = {};
+  leaveRequests.forEach(req => {
+     if (req.status === 'approved' && req.startDate) {
+        const d = new Date(req.startDate);
+        const monthKey = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+        if (!monthlyHolidayBreakdownMap[monthKey]) monthlyHolidayBreakdownMap[monthKey] = 0;
+        monthlyHolidayBreakdownMap[monthKey] += parseInt(req.totalDays || 0);
+     }
+  });
+  const monthlyHolidayBreakdown = Object.entries(monthlyHolidayBreakdownMap)
+     .map(([month, used]) => ({ month, used }))
+     .sort((a, b) => new Date(b.month) - new Date(a.month))
+     .slice(0, 4);
+
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const handleLeaveSubmit = async () => {
+    if (!leaveFormData.days || !leaveFormData.startDate || !leaveFormData.endDate || !leaveFormData.reason) {
+      alert("Please fill all required fields, including the number of days.");
+      return;
+    }
+    const sDate = new Date(leaveFormData.startDate);
+    const eDate = new Date(leaveFormData.endDate);
+    if (eDate < sDate) {
+      alert("End date cannot be before start date.");
+      return;
+    }
+    const days = parseInt(leaveFormData.days, 10);
+    if (isNaN(days) || days <= 0) {
+      alert("Please enter a valid number of days.");
+      return;
+    }
+
+    setLeaveSaving(true);
+    try {
+      await addDoc(collection(db, 'leave_requests'), {
+        teacherId,
+        teacherName: profile?.fullName || 'Teacher',
+        type: leaveFormData.type,
+        startDate: leaveFormData.startDate,
+        endDate: leaveFormData.endDate,
+        totalDays: days,
+        reason: leaveFormData.reason,
+        status: 'pending',
+        timestamp: serverTimestamp()
+      });
+      alert("Leave Request Submitted successfully!");
+      setLeaveModalOpen(false);
+      setLeaveFormData({ type: 'summer', startDate: '', endDate: '', reason: '', days: '' });
+    } catch (e) {
+      console.error(e);
+      alert("Failed to submit leave request.");
+    }
+    setLeaveSaving(false);
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+  const handleNextMonth = () => {
+    setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  // Mock Stats Generator based on month
+  const currentYear = calendarDate.getFullYear();
+  const currentMonth = calendarDate.getMonth();
+  
+  const generateMockStats = (year, month) => {
+    const totalDays = getDaysInMonth(year, month);
+    // Simple deterministic logic based on month index to simulate dynamic data
+    const workingDays = Math.floor(totalDays * 0.75); 
+    const presentDays = workingDays - (month % 3); 
+    const lateMarks = month % 4;
+    const holidaysTook = (month % 2) + 1;
+    return {
+      workingDays,
+      presentDays,
+      lateMarks,
+      holidaysTook
+    };
+  };
+
+  const monthlyStats = generateMockStats(currentYear, currentMonth);
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  // ----------------------------------------
   const [ptmStudent, setPtmStudent] = useState(null);
   const [selectedBatchTab, setSelectedBatchTab] = useState(null);
   
@@ -687,38 +901,73 @@ export default function TeacherDashboard({ profile }) {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="page-title">Faculty Portal</h1>
-          <p className="page-subtitle">{activeTab === 'home' ? 'Welcome back, ' + profile?.fullName : profile?.subjects || 'Faculty'}</p>
+      <div className="page-header" style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '48px', width: '100%' }}>
+        
+        {/* perfectly centered Animated Text Zone */}
+        <div className="quote-container" style={{ position: 'relative', width: '100%', boxSizing: 'border-box', height: '30px' }}>
+          <h1 className="page-title quote-title" style={{ 
+            color: 'var(--brand-primary)', margin: 0, 
+            position: 'absolute', left: 0, right: 0, textAlign: 'center',
+            opacity: showQuote ? 0 : 1, transform: showQuote ? 'translateY(-20px)' : 'translateY(0)',
+            transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+            overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            We are happy to welcome you on board!
+          </h1>
+          <h1 className="page-title quote-text" style={{ 
+            color: 'var(--text-secondary)', margin: 0, fontStyle: 'italic', fontWeight: 500,
+            position: 'absolute', left: 0, right: 0, textAlign: 'center',
+            opacity: showQuote ? 1 : 0, transform: showQuote ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+            overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            "{quoteOfTheDay}"
+          </h1>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+
+        {/* Right Buttons - Anchored to the edge */}
+        <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 12 }}>
           {activeTab === 'dashboard_hub' ? (
             <button 
-              className="btn" 
+              className="btn responsive-btn" 
               onClick={() => handleTabChange('home')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
             >
               <span className="material-symbols-outlined" style={{ color: 'white' }}>home</span>
-              <span style={{ color: 'white' }}>Home</span>
+              <span className="hide-on-mobile" style={{ color: 'white' }}>Home</span>
             </button>
           ) : (
             <button 
-              className="btn" 
+              className="btn responsive-btn" 
               onClick={() => handleTabChange('dashboard_hub')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
             >
               <span className="material-symbols-outlined" style={{ color: 'white' }}>grid_view</span>
-              <span style={{ color: 'white' }}>Dashboard</span>
+              <span className="hide-on-mobile" style={{ color: 'white' }}>Dashboard</span>
             </button>
           )}
           <button 
-            className="btn btn-ghost" 
+            className="btn btn-ghost responsive-btn" 
             onClick={() => setIProfileOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 20, border: '1px solid var(--surface-border)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, border: '1px solid var(--surface-border)' }}
           >
             <span className="material-symbols-outlined">person</span>
-            <span>Profile</span>
+            <span className="hide-on-mobile">Profile</span>
+          </button>
+          
+          <button 
+            className="btn btn-ghost responsive-btn"
+            onClick={() => setIsTicketOpen(true)}
+            style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, border: '1px solid var(--surface-border)', color: 'var(--brand-primary)' }}
+            title="Open Tickets"
+          >
+            <span className="material-symbols-outlined">confirmation_number</span>
+            {hasNewTicketAlert && (
+              <span style={{
+                position: 'absolute', top: 4, right: 12, width: 8, height: 8, 
+                backgroundColor: '#d32f2f', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface-bg)'
+              }} />
+            )}
           </button>
         </div>
       </div>
@@ -761,9 +1010,6 @@ export default function TeacherDashboard({ profile }) {
 
       {activeTab === 'home' && (
         <div className="portal-card" style={{ background: 'linear-gradient(145deg, var(--surface-bg), rgba(253,180,42,0.05))' }}>
-          <h1 style={{ fontSize: 28, color: 'var(--brand-primary)', marginBottom: 8 }}>We're happy to have you on board!</h1>
-          <p style={{ fontStyle: 'italic', color: 'var(--text-secondary)', marginBottom: 24 }}>"The influence of a good teacher can never be erased."</p>
-
           <div className="responsive-grid-2" style={{ gap: 24 }}>
             {/* Left Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -911,13 +1157,42 @@ export default function TeacherDashboard({ profile }) {
                 </div>
               </div>
             </div>
+
+            {/* Leave Requests Tracker */}
+            {leaveRequests.length > 0 && (
+              <div className="portal-card" style={{ marginTop: 20 }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>My Leave Requests</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {leaveRequests.map(req => (
+                    <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 'bold', color: '#1e293b' }}>
+                          {req.type === 'summer' ? 'Summer Vacation' : req.type === 'sick' ? 'Sick Leave' : req.type === 'festival' ? 'Festival' : 'Travel'}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+                          {req.startDate} to {req.endDate} ({req.totalDays} Days)
+                        </p>
+                      </div>
+                      <div>
+                        <span className="badge" style={{
+                          background: req.status === 'approved' ? '#e8f5e9' : req.status === 'rejected' ? '#ffebee' : '#fff3e0',
+                          color: req.status === 'approved' ? '#2e7d32' : req.status === 'rejected' ? '#c62828' : '#e65100'
+                        }}>
+                          {req.status === 'approved' ? 'Approved' : req.status === 'rejected' ? 'Rejected' : 'Pending Approval'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {activeTab === 'dashboard_hub' && (
         <div style={{ padding: '0 8px' }}>
-           <h2 style={{ marginBottom: 24, color: 'var(--text-primary)', fontSize: 24 }}>Teacher Dashboard Hub</h2>
+           <h2 style={{ marginBottom: 24, color: 'var(--text-primary)', fontSize: 24 }}>{profile?.fullName || 'Teacher'}'s Arena</h2>
            
            {/* Top Widget - Board Countdown */}
            <div className="portal-card" style={{ cursor: 'pointer', textAlign: 'center', background: 'linear-gradient(135deg, #f0932b, #ff7f50)', color: 'white', marginBottom: 24, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -927,7 +1202,7 @@ export default function TeacherDashboard({ profile }) {
            </div>
 
            {/* Grid */}
-           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+           <div className="grid-auto-300">
              <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('attendance')}>
                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>event_available</span>
@@ -996,32 +1271,228 @@ export default function TeacherDashboard({ profile }) {
             <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>My Attendance Record</h2>
           </div>
           
-          <div className="portal-card" style={{ marginBottom: 24, background: 'linear-gradient(135deg, #e3f2fd, #bbdefb)', border: 'none' }}>
-             <h3 style={{ color: '#1565c0', margin: '0 0 16px 0', fontSize: 18 }}>Attendance Overview (Current Month)</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 20 }}>
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: '20px 10px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <p style={{ margin: 0, fontSize: 14, color: '#1565c0', fontWeight: 'bold' }}>Total Working Days</p>
-                 <p style={{ margin: '8px 0 0 0', fontSize: 32, fontWeight: '900', color: '#0d47a1' }}>22</p>
-               </div>
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: '20px 10px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <p style={{ margin: 0, fontSize: 14, color: '#2e7d32', fontWeight: 'bold' }}>Days Present</p>
-                 <p style={{ margin: '8px 0 0 0', fontSize: 32, fontWeight: '900', color: '#1b5e20' }}>21</p>
-               </div>
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: '20px 10px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <p style={{ margin: 0, fontSize: 14, color: '#e65100', fontWeight: 'bold' }}>Late Marks</p>
-                 <p style={{ margin: '8px 0 0 0', fontSize: 32, fontWeight: '900', color: '#bf360c' }}>1</p>
-               </div>
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: '20px 10px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <p style={{ margin: 0, fontSize: 14, color: '#6a1b9a', fontWeight: 'bold' }}>On-Time Ratio</p>
-                 <p style={{ margin: '8px 0 0 0', fontSize: 32, fontWeight: '900', color: '#4a148c' }}>95%</p>
-               </div>
-             </div>
+          <div className="grid-2" style={{ marginBottom: 24 }}>
+            {/* Left Column: Stats (Flippable) */}
+            <div 
+              className="portal-card" 
+              style={{ 
+                border: 'none', 
+                perspective: '1000px',
+                padding: 0,
+                cursor: 'pointer'
+              }}
+              onClick={() => setIsStatsFlipped(!isStatsFlipped)}
+            >
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                minHeight: '280px'
+              }}>
+                {/* FRONT: Grid Stats */}
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  backfaceVisibility: 'hidden',
+                  transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                  transform: isStatsFlipped ? 'rotateY(-180deg)' : 'rotateY(0deg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: 20,
+                  boxSizing: 'border-box',
+                  background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
+                  border: '1px solid #bae6fd',
+                  borderRadius: 16
+                }}>
+                   <h3 style={{ color: '#0369a1', margin: '0 0 12px 0', fontSize: 16 }}>Monthly Statistics (Click to Flip)</h3>
+                   <div className="grid-2" style={{ gap: 12, flex: 1 }}>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#0284c7', fontWeight: 'bold' }}>Total Working Days</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#0369a1' }}>{monthlyStats.workingDays}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#16a34a', fontWeight: 'bold' }}>Days Present</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#15803d' }}>{monthlyStats.presentDays}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#ea580c', fontWeight: 'bold' }}>Late Marks</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#c2410c' }}>{monthlyStats.lateMarks}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#9333ea', fontWeight: 'bold' }}>Holidays Took</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#7e22ce' }}>{monthlyStats.holidaysTook}</p>
+                     </div>
+                   </div>
+                </div>
+
+                {/* BACK: Pie Chart */}
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  backfaceVisibility: 'hidden',
+                  transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                  transform: isStatsFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: 20,
+                  boxSizing: 'border-box',
+                  background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
+                  border: '1px solid #bae6fd',
+                  borderRadius: 16
+                }}>
+                   <h3 style={{ color: '#0369a1', margin: '0 0 12px 0', fontSize: 16 }}>Attendance Breakdown</h3>
+                   <div style={{ flex: 1, position: 'relative' }}>
+                     <ResponsiveContainer width="100%" height="100%">
+                       <PieChart>
+                         <Pie
+                           data={[
+                             { name: 'Present', value: monthlyStats.presentDays, color: '#4caf50' },
+                             { name: 'Late', value: monthlyStats.lateMarks, color: '#ff9800' },
+                             { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' }
+                           ].filter(d => d.value > 0)}
+                           cx="50%"
+                           cy="50%"
+                           innerRadius={55}
+                           outerRadius={80}
+                           paddingAngle={4}
+                           dataKey="value"
+                           label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                           labelLine={true}
+                           style={{ filter: 'drop-shadow(0px 8px 12px rgba(0,0,0,0.15))' }}
+                         >
+                           <Label 
+                             value={`${monthlyStats.workingDays} Days`} 
+                             position="centerBottom" 
+                             dy={-10}
+                             fill="#0d47a1" 
+                             style={{ fontSize: '18px', fontWeight: '900' }} 
+                           />
+                           <Label 
+                             value="Total" 
+                             position="centerTop" 
+                             dy={10}
+                             fill="#64b5f6" 
+                             style={{ fontSize: '12px', fontWeight: 'bold' }} 
+                           />
+                           {
+                             [
+                               { name: 'Present', value: monthlyStats.presentDays, color: '#4caf50' },
+                               { name: 'Late', value: monthlyStats.lateMarks, color: '#ff9800' },
+                               { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' }
+                             ].filter(d => d.value > 0).map((entry, index) => (
+                               <Cell key={`cell-${index}`} fill={entry.color} />
+                             ))
+                           }
+                         </Pie>
+                         <Tooltip 
+                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }} 
+                           itemStyle={{ fontWeight: 'bold' }}
+                         />
+                         <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '13px', fontWeight: 'bold' }} />
+                       </PieChart>
+                     </ResponsiveContainer>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Calendar */}
+            <div className="portal-card" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>Attendance Calendar</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button className="btn-ghost btn-sm" onClick={handlePrevMonth} style={{ padding: '2px 6px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_left</span>
+                  </button>
+                  <strong style={{ fontSize: 14, minWidth: 90, textAlign: 'center' }}>
+                    {monthNames[currentMonth]} {currentYear}
+                  </strong>
+                  <button className="btn-ghost btn-sm" onClick={handleNextMonth} style={{ padding: '2px 6px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_right</span>
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ maxWidth: 360, margin: '0 auto' }}>
+                <div className="grid-7" style={{ textAlign: 'center', marginBottom: 6 }}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                    <div key={d} style={{ fontWeight: 'bold', color: 'var(--text-secondary)', fontSize: 11 }}>{d}</div>
+                  ))}
+                </div>
+
+                <div className="grid-7">
+                  {Array.from({ length: getFirstDayOfMonth(currentYear, currentMonth) }).map((_, i) => (
+                    <div key={`empty-${i}`} style={{
+                      aspectRatio: '1',
+                      border: '1px solid var(--surface-border)',
+                      borderRadius: 6,
+                      background: 'rgba(0,0,0,0.02)'
+                    }} />
+                  ))}
+                  {Array.from({ length: getDaysInMonth(currentYear, currentMonth) }).map((_, i) => {
+                    const day = i + 1;
+                    const isSunday = new Date(currentYear, currentMonth, day).getDay() === 0;
+                    let bgColor = 'var(--surface-base)';
+                    let color = 'var(--text-primary)';
+                    let border = '1px solid var(--surface-border)';
+                    let statusTitle = '';
+                    
+                    if (isSunday) {
+                      bgColor = 'rgba(59, 130, 246, 0.15)'; // Blue for Holiday
+                      color = '#3b82f6';
+                      border = '1px solid #3b82f6';
+                      statusTitle = 'Holiday';
+                    } else if (day % 14 === 3) {
+                      bgColor = 'rgba(239, 68, 68, 0.15)'; // Red for Leave
+                      color = 'var(--status-error)';
+                      border = '1px solid var(--status-error)';
+                      statusTitle = 'Leave';
+                    } else if (day % 7 === 2) {
+                      bgColor = 'rgba(249, 115, 22, 0.15)'; // Orange for Late
+                      color = '#f97316';
+                      border = '1px solid #f97316';
+                      statusTitle = 'Late';
+                    } else if (day < new Date().getDate() || (currentMonth < new Date().getMonth() && currentYear === new Date().getFullYear())) {
+                      bgColor = 'rgba(16, 185, 129, 0.15)'; // Green for Present
+                      color = 'var(--status-success)';
+                      border = '1px solid var(--status-success)';
+                      statusTitle = 'Present';
+                    }
+
+                    return (
+                      <div key={day} title={statusTitle} style={{ 
+                        aspectRatio: '1', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        background: bgColor,
+                        color: color,
+                        border: border,
+                        borderRadius: 6,
+                        fontWeight: 'bold',
+                        fontSize: 13,
+                        cursor: statusTitle ? 'help' : 'default'
+                      }}>
+                        {day}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="portal-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ margin: 0 }}>Recent Punch Records</h3>
-              <span className="badge badge-teacher" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9' }}>Biometric Sync Active</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {teacherAttendanceRecords.length === 0 && (
+                  <button className="btn btn-sm btn-ghost" onClick={injectFakeAttendanceData} style={{ padding: '4px 12px', border: '1px solid var(--surface-border)' }}>Inject Test Data</button>
+                )}
+                <span className="badge badge-teacher" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9' }}>Biometric Sync Active</span>
+              </div>
             </div>
             
             <div style={{ overflowX: 'auto' }}>
@@ -1033,44 +1504,39 @@ export default function TeacherDashboard({ profile }) {
                     <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Punch Out</th>
                     <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Status</th>
                     <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Total Hours</th>
+                    <th style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Role</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date())} (Today)</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>09:45 AM</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>--:-- --</td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ color: '#2e7d32', fontWeight: 'bold', background: '#e8f5e9', padding: '4px 8px', borderRadius: 4 }}>On Time</span></td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>--</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date(Date.now() - 86400000))} (Yesterday)</td>
-                    <td style={{ padding: '12px 16px' }}>09:50 AM</td>
-                    <td style={{ padding: '12px 16px' }}>06:15 PM</td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ color: '#2e7d32', fontWeight: 'bold', background: '#e8f5e9', padding: '4px 8px', borderRadius: 4 }}>On Time</span></td>
-                    <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>8h 25m</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date(Date.now() - 86400000 * 2))}</td>
-                    <td style={{ padding: '12px 16px' }}>10:15 AM</td>
-                    <td style={{ padding: '12px 16px' }}>06:30 PM</td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ color: '#c62828', fontWeight: 'bold', background: '#ffebee', padding: '4px 8px', borderRadius: 4 }}>Late</span></td>
-                    <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>8h 15m</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date(Date.now() - 86400000 * 3))}</td>
-                    <td style={{ padding: '12px 16px' }}>09:40 AM</td>
-                    <td style={{ padding: '12px 16px' }}>06:00 PM</td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ color: '#2e7d32', fontWeight: 'bold', background: '#e8f5e9', padding: '4px 8px', borderRadius: 4 }}>On Time</span></td>
-                    <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>8h 20m</td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date(Date.now() - 86400000 * 4))}</td>
-                    <td style={{ padding: '12px 16px' }}>09:55 AM</td>
-                    <td style={{ padding: '12px 16px' }}>06:05 PM</td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ color: '#2e7d32', fontWeight: 'bold', background: '#e8f5e9', padding: '4px 8px', borderRadius: 4 }}>On Time</span></td>
-                    <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>8h 10m</td>
-                  </tr>
+                  {teacherAttendanceRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        No punch records found yet.
+                      </td>
+                    </tr>
+                  ) : teacherAttendanceRecords.map(record => (
+                    <tr key={record.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                      <td style={{ padding: '12px 16px' }}>{formatDateForAttendance(new Date(record.date))}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: record.punchOut === '--:-- --' ? 'bold' : 'normal' }}>{record.punchIn}</td>
+                      <td style={{ padding: '12px 16px', color: record.punchOut === '--:-- --' ? 'var(--text-secondary)' : 'inherit' }}>{record.punchOut}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ 
+                          color: record.status === 'Late' ? '#c62828' : '#2e7d32', 
+                          fontWeight: 'bold', 
+                          background: record.status === 'Late' ? '#ffebee' : '#e8f5e9', 
+                          padding: '4px 8px', borderRadius: 4 
+                        }}>
+                          {record.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontWeight: record.punchOut !== '--:-- --' ? 'bold' : 'normal', color: record.punchOut === '--:-- --' ? 'var(--text-secondary)' : 'inherit' }}>{record.totalHours}</td>
+                      <td style={{ padding: '12px 16px' }} title={record.roleCompleted ? "All lectures taken and reports submitted" : (record.punchOut === '--:-- --' ? "Pending: Lectures or reports incomplete" : "Lectures missed or report missing")}>
+                        <span className="material-symbols-outlined" style={{ color: record.roleCompleted ? 'var(--status-success)' : (record.punchOut === '--:-- --' ? '#9e9e9e' : 'var(--status-error)') }}>
+                          {record.roleCompleted ? 'check_circle' : (record.punchOut === '--:-- --' ? 'pending' : 'cancel')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1079,6 +1545,180 @@ export default function TeacherDashboard({ profile }) {
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
                 This data is a preview. It will automatically populate in real-time once the office biometric fingerprint scanner hardware is integrated.
               </p>
+            </div>
+          </div>
+
+          {/* Holiday Analytics Section */}
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: 24, color: 'var(--text-primary)' }}>Holiday Analytics</h2>
+            
+            <div className="grid-2">
+              
+              {/* Left Column: Yearly Quota (Flippable) */}
+                <div 
+                  className="portal-card" 
+                  style={{ 
+                    border: 'none', 
+                    perspective: '1000px',
+                    padding: 0,
+                    cursor: 'pointer',
+                    minHeight: 380
+                  }}
+                  onClick={() => setIsHolidayStatsFlipped(!isHolidayStatsFlipped)}
+                >
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  minHeight: 380
+                }}>
+                  {/* FRONT: Quota Grid */}
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  backfaceVisibility: 'hidden',
+                  transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                  transform: isHolidayStatsFlipped ? 'rotateY(-180deg)' : 'rotateY(0deg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: 20,
+                  boxSizing: 'border-box',
+                  background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 16
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div>
+                      <h3 style={{ color: '#1e293b', margin: '0 0 6px 0', fontSize: 16 }}>Yearly Holiday Quota</h3>
+                      <button className="btn btn-sm" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 4, padding: '4px 12px', fontSize: 12, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setLeaveModalOpen(true); }}>+ Request Leave</button>
+                    </div>
+                    <span className="badge" style={{ background: '#0f172a', color: 'white' }}>{totalHolidaysLeft} Left</span>
+                  </div>
+                    
+                    <div className="grid-2" style={{ gap: 12, flex: 1 }}>
+                      {Object.entries(yearlyHolidayStats).map(([key, stat]) => (
+                        <div key={key} style={{ background: 'white', padding: '16px 12px', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #f1f5f9' }}>
+                          <p style={{ margin: 0, fontSize: 14, color: stat.color, fontWeight: 'bold' }}>{stat.label}</p>
+                          <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+                            <span style={{ fontSize: 28, fontWeight: '900', color: '#1e293b', lineHeight: 1 }}>{stat.used}</span>
+                            <span style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>/ {stat.quota} used</span>
+                          </div>
+                          {/* Progress bar */}
+                          <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+                            <div style={{ width: `${(stat.used / stat.quota) * 100}%`, height: '100%', background: stat.color, borderRadius: 3 }}></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                {/* BACK: Pie Chart */}
+                <div style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  backfaceVisibility: 'hidden',
+                  transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                  transform: isHolidayStatsFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: 20,
+                  boxSizing: 'border-box',
+                  background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 16
+                }}>
+                  <h3 style={{ color: '#1e293b', margin: '0 0 12px 0', fontSize: 16 }}>Quota Usage Breakdown</h3>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={
+                              Object.values(yearlyHolidayStats).some(s => s.used > 0)
+                                ? Object.values(yearlyHolidayStats).filter(s => s.used > 0).map(s => ({ name: s.label, value: s.used, color: s.color }))
+                                : [{ name: 'No Holidays Used', value: 1, color: '#e2e8f0' }]
+                            }
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={4}
+                              dataKey="value"
+                              label={Object.values(yearlyHolidayStats).some(s => s.used > 0) ? ({ name, value }) => `${name}: ${value}` : false}
+                              labelLine={Object.values(yearlyHolidayStats).some(s => s.used > 0)}
+                              stroke="none"
+                            >
+                            <Label 
+                              value={`${totalHolidaysUsed} Used`} 
+                              position="centerBottom" 
+                              dy={-10}
+                              fill="#1e293b" 
+                              style={{ fontSize: '16px', fontWeight: '900' }} 
+                            />
+                            <Label 
+                              value="Total" 
+                              position="centerTop" 
+                              dy={10}
+                              fill="#64748b" 
+                              style={{ fontSize: '12px', fontWeight: 'bold' }} 
+                            />
+                            {
+                              Object.values(yearlyHolidayStats).some(s => s.used > 0) 
+                                ? Object.values(yearlyHolidayStats).filter(s => s.used > 0).map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ))
+                                : <Cell key="cell-empty" fill="#e2e8f0" />
+                            }
+                          </Pie>
+                            <Tooltip 
+                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }} 
+                              itemStyle={{ fontWeight: 'bold' }}
+                              cursor={false}
+                            />
+                            {Object.values(yearlyHolidayStats).some(s => s.used > 0) && (
+                              <Legend verticalAlign="bottom" height={24} iconType="circle" wrapperStyle={{ fontSize: '13px', fontWeight: 'bold' }} />
+                            )}
+                          </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Monthly Breakdown */}
+              <div className="portal-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 16, color: 'var(--text-primary)' }}>Monthly Tracker</h3>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {monthlyHolidayBreakdown.length === 0 ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                      No holidays taken yet.
+                    </div>
+                  ) : (
+                    monthlyHolidayBreakdown.map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(106, 27, 154, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span className="material-symbols-outlined" style={{ color: '#6a1b9a' }}>calendar_month</span>
+                        </div>
+                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{item.month}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 20, fontWeight: '900', color: item.used > 0 ? '#d32f2f' : '#2e7d32' }}>{item.used}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 4 }}>Days Took</span>
+                      </div>
+                    </div>
+                  )))}
+                  
+                  <div style={{ marginTop: 'auto', padding: 16, background: '#f5f5f5', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="material-symbols-outlined" style={{ color: '#616161' }}>lightbulb</span>
+                    <p style={{ margin: 0, fontSize: 13, color: '#616161' }}>
+                      Tip: Plan your Summer Vacations properly to avoid overlap with Board Exams.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1142,7 +1782,7 @@ export default function TeacherDashboard({ profile }) {
 
           <div className="portal-card" style={{ marginBottom: 24 }}>
              <h3 style={{ margin: '0 0 20px 0' }}>Metric Breakdown (20 Points Each)</h3>
-             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+             <div className="grid-auto-200">
                 {[
                   { label: 'Attendance', val: perfData.breakdown.attendance, icon: 'event_available', color: '#1976d2', bg: '#e3f2fd' },
                   { label: 'Feedbacks', val: perfData.breakdown.feedback, icon: 'reviews', color: '#e65100', bg: '#fff3e0' },
@@ -1366,7 +2006,7 @@ export default function TeacherDashboard({ profile }) {
                             <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>menu_book</span>
                             Batch Self-Study Activity
                           </h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                          <div className="grid-auto-300">
                             {batchSelfStudyLogs.filter(att => !att.log.teacherScore).map(att => {
                               const studentInfo = enrichedStudents.find(s => s.id === att.studentId);
                               const studentName = studentInfo ? (studentInfo.fullName || studentInfo.studentName || studentInfo.name) : 'Unknown Student';
@@ -1429,7 +2069,7 @@ export default function TeacherDashboard({ profile }) {
                           Student Analytics
                         </h4>
                         
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+                        <div className="grid-auto-300" style={{ gap: 20 }}>
                           {enrichedStudents.map(student => (
                             <div key={student.id} className="portal-card hover-lift" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
                               
@@ -2158,7 +2798,7 @@ export default function TeacherDashboard({ profile }) {
                   <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>edit_document</span>
                   Create Class Test
                 </h2>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                <div className="grid-2" style={{ gap: 16, marginBottom: 24 }}>
                   <div className="form-group">
                     <label className="form-label">Date</label>
                     <input type="date" className="portal-input" value={classTestModal.form.date} onChange={e => setClassTestModal({ ...classTestModal, form: { ...classTestModal.form, date: e.target.value } })} />
@@ -2463,6 +3103,56 @@ export default function TeacherDashboard({ profile }) {
           </div>
         </div>
       )}
+      {/* Leave Request Modal */}
+      {leaveModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: 500, maxWidth: '90%', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h2 style={{ margin: '0 0 8px 0' }}>Request Leave</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Select the type of leave and the dates.</p>
+            
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">How many days leave do you want?</label>
+              <input type="number" min="1" className="portal-input" value={leaveFormData.days} onChange={e => setLeaveFormData({...leaveFormData, days: e.target.value})} placeholder="e.g. 2" />
+            </div>
+
+            <div className="grid-2" style={{ gap: 16, marginBottom: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Start Date</label>
+                <input type="date" className="portal-input" value={leaveFormData.startDate} onChange={e => setLeaveFormData({...leaveFormData, startDate: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">End Date</label>
+                <input type="date" className="portal-input" value={leaveFormData.endDate} onChange={e => setLeaveFormData({...leaveFormData, endDate: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Leave Category</label>
+              <select className="portal-input" value={leaveFormData.type} onChange={e => setLeaveFormData({...leaveFormData, type: e.target.value})}>
+                <option value="summer">Summer Vacation (15 days quota)</option>
+                <option value="sick">Sick Leave (5 days quota)</option>
+                <option value="festival">Festival (5 days quota)</option>
+                <option value="travel">Travel + Village (5 days quota)</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Reason</label>
+              <textarea className="portal-input" style={{ minHeight: 60 }} value={leaveFormData.reason} onChange={e => setLeaveFormData({...leaveFormData, reason: e.target.value})} placeholder="Provide a brief reason for the leave" />
+            </div>
+
+            <div className="modal-footer" style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button className="btn-ghost" onClick={() => setLeaveModalOpen(false)} disabled={leaveSaving} style={{ padding: '8px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+              <button className="btn-primary" onClick={handleLeaveSubmit} disabled={leaveSaving} style={{ padding: '8px 24px', borderRadius: 6, border: 'none', background: 'var(--brand-primary)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                {leaveSaving ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Ticket Drawer for Teachers */}
+      <TicketDrawer isOpen={isTicketOpen} onClose={() => setIsTicketOpen(false)} />
     </div>
   );
 }

@@ -349,7 +349,7 @@ export default function StudentDashboard({ profile }) {
           )}
 
           {activeTab === 'submit' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
+            <div className="grid-1-2">
               <div className="portal-card">
                 <h2 style={{ marginBottom: 16 }}>Submit Assignment</h2>
                 <form onSubmit={handleSubmitAssignment} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -643,13 +643,13 @@ export default function StudentDashboard({ profile }) {
                 </div>
 
                 <div style={{ maxWidth: 450, margin: '0 auto' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, textAlign: 'center', marginBottom: 8 }}>
+                  <div className="grid-7" style={{ textAlign: 'center', marginBottom: 8 }}>
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                       <div key={d} style={{ fontWeight: 'bold', color: 'var(--text-secondary)', fontSize: 13 }}>{d}</div>
                     ))}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+                  <div className="grid-7">
                     {Array.from({ length: firstDay }).map((_, i) => (
                       <div key={`empty-${i}`} style={{
                         aspectRatio: '1',
@@ -711,7 +711,7 @@ export default function StudentDashboard({ profile }) {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
+              <div className="grid-1-2">
                 <div className="portal-card" style={{ textAlign: 'center', padding: '40px 20px', height: 'fit-content' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--status-info)', marginBottom: 16 }}>fact_check</span>
                   <h3 style={{ fontSize: 36, fontWeight: 800, margin: '8px 0' }}>
@@ -755,7 +755,7 @@ export default function StudentDashboard({ profile }) {
                     <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>menu_book</span>
                     Self-Study Activity Logs
                   </h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                  <div className="grid-auto-300">
                     {attendance.filter(att => att.sessionType === 'Self-Study' && att.selfStudyLog).map(att => (
                       <div key={att.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 12, border: '1px solid var(--surface-border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid var(--surface-border)', paddingBottom: 8 }}>
@@ -802,7 +802,7 @@ export default function StudentDashboard({ profile }) {
           })()}
 
           {activeTab === 'performance' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            <div className="grid-2">
               <div className="portal-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--status-success)', marginBottom: 16 }}>task_alt</span>
                 <h3 style={{ fontSize: 36, fontWeight: 800, margin: '8px 0' }}>{completionPercentage}%</h3>
@@ -839,7 +839,7 @@ export default function StudentDashboard({ profile }) {
             const pendingAmount = totalFees - paidAmount;
             
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
+              <div className="grid-1-2">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div className="portal-card" style={{ textAlign: 'center', padding: '30px 20px', borderLeft: '4px solid var(--brand-primary)' }}>
                     <h3 style={{ fontSize: 24, margin: '0 0 8px 0', color: 'var(--text-primary)' }}>₹{totalFees.toLocaleString()}</h3>

@@ -407,10 +407,62 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
 .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+.grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.grid-auto-200 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.grid-auto-250 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.grid-auto-300 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 
 @media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 700px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4, .grid-1-2, .grid-2-1 { grid-template-columns: 1fr; gap: 16px; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .grid-7 { gap: 2px; } /* Shrink gap on mobile for calendar */
+  /* Calendar text shrinking handled natively or by small font size in component */
+}
+
+/* ── Top Actions Header ── */
+.top-actions-container {
+  position: fixed;
+  top: 24px;
+  left: 32px;
+  right: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 999;
+}
+
+@media (max-width: 768px) {
+  .top-actions-container {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+  .hide-on-mobile {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+  
+  .quote-container { padding: 0 100px !important; }
+  .quote-title { font-size: 14px !important; white-space: normal !important; }
+  .quote-text { font-size: 11px !important; white-space: normal !important; }
+  .responsive-btn { padding: 8px !important; }
+}
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+  
+  .quote-container { padding: 0 320px; }
+  .quote-title { font-size: 24px; white-space: nowrap; }
+  .quote-text { font-size: 17px; white-space: nowrap; }
+  .responsive-btn { padding: 8px 16px; }
 }
 
 /* ── Spinner ── */

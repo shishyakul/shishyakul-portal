@@ -180,7 +180,7 @@ export default function ServiceManagerDashboard() {
       </div>
 
       {/* ZONE 1: Global KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+      <div className="grid-auto-250" style={{ gap: '16px' }}>
         <div className="portal-card" style={{ borderLeft: '4px solid #10b981', display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
           <div style={{ background: '#d1fae5', padding: '12px', borderRadius: '12px', display: 'flex' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#10b981' }}>diversity_3</span>
@@ -223,7 +223,7 @@ export default function ServiceManagerDashboard() {
       </div>
 
       {/* ZONE 2: Analytics Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="grid-2" style={{ gap: '24px' }}>
         <div className="portal-card" style={{ padding: '24px' }}>
           <h2 style={{ fontSize: 18, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>ssid_chart</span>
@@ -266,7 +266,7 @@ export default function ServiceManagerDashboard() {
       </div>
 
       {/* ZONE 3: Operations & Test Workflows */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '24px' }}>
+      <div className="grid-1-2" style={{ gap: '24px' }}>
         
         {/* Workload */}
         <div className="portal-card" style={{ padding: '24px' }}>
@@ -300,7 +300,7 @@ export default function ServiceManagerDashboard() {
                 Test Duty Pipeline
               </h2>
             </div>
-            <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div className="grid-3" style={{ padding: '20px', gap: 16 }}>
               <div style={{ background: '#f9fafb', padding: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}>
                 <h4 style={{ fontSize: 13, color: '#6b7280', margin: '0 0 12px 0', textTransform: 'uppercase' }}>Drafted ({drafted.length})</h4>
                 {drafted.slice(0,3).map(t => (
@@ -344,7 +344,7 @@ export default function ServiceManagerDashboard() {
               {todaysClasses.length === 0 ? (
                 <div className="empty-state">No classes scheduled for today.</div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                <div className="grid-auto-250" style={{ gap: '12px' }}>
                   {todaysClasses.map((cls, idx) => (
                     <div key={idx} style={{ display: 'flex', background: 'var(--bg-main)', padding: '12px', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
                       <div style={{ width: '90px', borderRight: '1px solid var(--surface-border)', paddingRight: '12px', marginRight: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>

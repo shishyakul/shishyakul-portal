@@ -60,11 +60,15 @@ const NAV_CONFIG = {
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
   ],
   teacher: [
+    { to: '/dashboard#dashboard_hub', icon: 'grid_view',     label: 'Dashboard' },
     { to: '/dashboard#home',      icon: 'home',            label: 'Home' },
     { to: '/dashboard#batches',   icon: 'groups',          label: 'My Batches' },
     { to: '/dashboard#timetable', icon: 'dashboard',       label: 'My Timetable' },
     { to: '/dashboard#materials', icon: 'auto_stories',    label: 'Course Materials' },
     { to: '/dashboard#grading',   icon: 'grading',         label: 'Grading & Submissions' },
+    { to: '/dashboard#attendance', icon: 'event_available', label: 'Attendance' },
+    { to: '/dashboard#performance', icon: 'military_tech', label: 'Performance' },
+    { to: '/dashboard#feedbacks',  icon: 'reviews',        label: 'Manager Feedback' },
   ],
   student: [
     { to: '/dashboard#feed',      icon: 'dashboard',       label: 'My Feed' },
@@ -78,7 +82,7 @@ const NAV_CONFIG = {
   ]
 };
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const { profile, logout, switchTestUser } = useAuth();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -162,8 +166,11 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <aside className="sidebar">
-        {/* Brand */}
+      <div 
+        className={`sidebar-overlay ${isOpen ? 'open' : ''}`} 
+        onClick={onClose}
+      />
+      <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-brand">
         {profile?.role === 'teacher' ? (
           <>
@@ -265,8 +272,8 @@ export default function Sidebar() {
 
       {/* DEV ONLY ROLE SWITCHER */}
       {window.location.hostname === 'localhost' && (
-        <div style={{ padding: '12px', borderTop: '1px solid var(--surface-border)' }}>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Local Test Switcher:</p>
+        <div className="sidebar-test-switcher" style={{ padding: '12px', borderTop: '1px solid var(--surface-border)' }}>
+          <p className="sidebar-test-switcher-label" style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Local Test Switcher:</p>
           <select 
             value={profile?.role || 'front_desk_manager'} 
             onChange={handleTestRoleChange}

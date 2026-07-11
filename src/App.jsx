@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
@@ -23,10 +24,11 @@ import TopActions from './components/TopActions';
 
 /* ── Layout wrapper for authenticated pages ── */
 function PortalLayout({ children }) {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   return (
     <div className="portal-shell">
-      <TopActions />
-      <Sidebar />
+      <TopActions onMenuClick={() => setIsMobileSidebarOpen(true)} />
+      <Sidebar isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
       <main className="portal-main">
         {children}
       </main>
