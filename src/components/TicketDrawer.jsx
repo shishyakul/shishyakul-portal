@@ -7,8 +7,8 @@ import './TicketDrawer.css';
 
 const PORTAL_ROLES = [
   { id: 'inventory_manager', label: 'Inventory Manager' },
-  { id: 'front_desk_manager', label: 'Front Desk' },
-  { id: 'admin', label: 'System Admin' },
+  { id: 'front_desk_manager', label: 'Front Desk Manager' },
+  { id: 'admin', label: 'Admin Manager' },
   { id: 'service_manager', label: 'Service Manager' },
   { id: 'branch_manager', label: 'Branch Manager' },
   { id: 'teacher', label: 'Teacher' }
@@ -47,7 +47,11 @@ const TicketItem = ({ ticket, isInbox, getRoleLabel, user, profile }) => {
   const handleAddRemark = async (e) => {
     e.preventDefault();
     if (!remarkText.trim()) return;
-    await addTicketRemark(ticket.id, user.uid, profile.fullName || profile.displayName || 'User', remarkText);
+    
+    // Determine the target user/role for the notification
+    const targetUserId = user.uid === ticket.senderUid ? ticket.targetRole : ticket.senderUid;
+    
+    await addTicketRemark(ticket.id, user.uid, profile.fullName || profile.displayName || 'User', remarkText, targetUserId);
     setRemarkText('');
   };
 
@@ -252,7 +256,7 @@ export default function TicketDrawer({ isOpen, onClose }) {
       <div className={`ticket-drawer-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} />
       <div className={`ticket-drawer ${isOpen ? 'open' : ''}`}>
         <div className="ticket-header">
-          <h2>Support Tickets</h2>
+          <h2>Anurodh Samvad</h2>
           <button className="ticket-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </button>

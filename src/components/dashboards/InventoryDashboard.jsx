@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigate } from 'react-router-dom';
+import NotificationBell from '../NotificationBell';
 
 export default function InventoryDashboard({ profile }) {
   const navigate = useNavigate();
@@ -58,6 +59,9 @@ export default function InventoryDashboard({ profile }) {
         <div>
           <h1 className="page-title">Welcome, {profile?.fullName?.split(' ')[0] ?? 'Rupali Mam'} 👋</h1>
           <p className="page-subtitle">Inventory & Asset Command Center</p>
+        </div>
+        <div>
+          <NotificationBell />
         </div>
       </div>
 

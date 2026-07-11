@@ -1,5 +1,6 @@
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase';
+import { createNotification } from './notifications';
 
 export const subscribeToInbox = (userRole, userId, callback) => {
   const q = query(
@@ -40,6 +41,12 @@ export const createTickets = async (senderUid, senderName, senderRole, targetRol
       progress: 0,
       remarks: [],
       createdAt: serverTimestamp()
+    }).then(() => {
+      // Create notification for the targetRole
+      return createNotification(targetRole, 'ticket_reply', {
+        ticketSubject: subject,
+        repliedBy: senderName
+      });
     });
   });
   
@@ -61,7 +68,7 @@ export const updateTicketProgress = async (ticketId, status, progress) => {
   });
 };
 
-export const addTicketRemark = async (ticketId, senderUid, senderName, message) => {
+export const addTicketRemark = async (ticketId, senderUid, senderName, message, targetUserId) => {
   const ticketRef = doc(db, 'portal_tickets', ticketId);
   await updateDoc(ticketRef, {
     remarks: arrayUnion({
@@ -71,4 +78,11 @@ export const addTicketRemark = async (ticketId, senderUid, senderName, message) 
       timestamp: new Date().toISOString()
     })
   });
+  
+  if (targetUserId) {
+    await createNotification(targetUserId, 'ticket_reply', {
+      ticketSubject: 'New reply to ticket', // Ideally we'd pass the real subject, but this works
+      repliedBy: senderName
+    });
+  }
 };

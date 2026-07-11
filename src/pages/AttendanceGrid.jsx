@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { createNotification } from '../services/notifications';
 import './AttendanceGrid.css';
 
 const BATCH_DEF = {
@@ -291,6 +292,14 @@ export default function AttendanceGrid() {
       }
       
       setIsAlreadyMarked(true);
+
+      if (absentees.size > 0) {
+        await createNotification('front_desk_manager', 'attendance_alert', {
+          batch: selectedBatch,
+          sessionType: sessionType,
+          absentCount: absentees.size
+        });
+      }
 
       // Show success modal
       setShowSuccess(true);

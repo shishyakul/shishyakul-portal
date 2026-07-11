@@ -2,6 +2,7 @@ import React from 'react';
 import { db } from '../firebase';
 import { updateDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import { createNotification } from '../services/notifications';
 import './TicketDrawer.css';
 
 export default function NotificationDrawer({ isOpen, onClose, notifications = [], onDismiss }) {
@@ -69,6 +70,7 @@ export default function NotificationDrawer({ isOpen, onClose, notifications = []
                           onClick={async () => {
                             if(window.confirm('Reject this leave request?')) {
                               await updateDoc(doc(db, 'leave_requests', req.id), { status: 'rejected', actedBy: profile.role });
+                              await createNotification(req.teacherId, 'leave_status', { type: req.type, status: 'rejected', actedBy: profile.fullName || profile.role });
                             }
                           }}
                           className="btn-ghost" style={{ padding: '8px 0', color: '#ef4444', fontSize: 13, cursor: 'pointer', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', fontWeight: 600 }}>Reject</button>
@@ -76,6 +78,7 @@ export default function NotificationDrawer({ isOpen, onClose, notifications = []
                           onClick={async () => {
                             if(window.confirm('Approve this leave request?')) {
                               await updateDoc(doc(db, 'leave_requests', req.id), { status: 'approved', actedBy: profile.role });
+                              await createNotification(req.teacherId, 'leave_status', { type: req.type, status: 'approved', actedBy: profile.fullName || profile.role });
                             }
                           }}
                           className="btn-primary" style={{ padding: '8px 0', background: '#22c55e', border: 'none', fontSize: 13, cursor: 'pointer', borderRadius: 8, color: 'white', fontWeight: 600, boxShadow: '0 4px 12px rgba(34, 197, 94, 0.2)' }}>Approve</button>
@@ -135,6 +138,49 @@ export default function NotificationDrawer({ isOpen, onClose, notifications = []
                       <p style={{ margin: 0, fontWeight: 600 }}>{req.topicName}</p>
                       <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#4f46e5' }}>Batch: {req.batch} | Teacher: {req.teacherName}</p>
                       <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Duration: {req.durationHours} hr</p>
+                   </div>
+                 );
+               }
+
+               if (req.notifType === 'target') {
+                 return (
+                   <div key={req.id} style={{ padding: 16, border: '1px solid #fed7aa', borderRadius: 12, background: '#fff7ed', position: 'relative' }}>
+                      <button onClick={() => onDismiss(req.id)} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#f97316' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                      </button>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#ea580c', display: 'flex', alignItems: 'center', gap: 6 }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>track_changes</span> New Weekly Target</h4>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{req.title}</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#ea580c' }}>Assigned by: {req.managerName}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Date: {req.date}</p>
+                   </div>
+                 );
+               }
+
+               if (req.notifType === 'ticket_reply') {
+                 return (
+                   <div key={req.id} style={{ padding: 16, border: '1px solid #fbcfe8', borderRadius: 12, background: '#fdf2f8', position: 'relative' }}>
+                      <button onClick={() => onDismiss(req.id)} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#ec4899' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                      </button>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#db2777', display: 'flex', alignItems: 'center', gap: 6 }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>forum</span> New Ticket Reply</h4>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{req.ticketSubject}</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#db2777' }}>Reply from: {req.repliedBy}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Date: {req.date}</p>
+                   </div>
+                 );
+               }
+
+               if (req.notifType === 'leave_status') {
+                 const isApproved = req.status === 'approved';
+                 return (
+                   <div key={req.id} style={{ padding: 16, border: `1px solid ${isApproved ? '#bbf7d0' : '#fecaca'}`, borderRadius: 12, background: isApproved ? '#f0fdf4' : '#fef2f2', position: 'relative' }}>
+                      <button onClick={() => onDismiss(req.id)} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: isApproved ? '#22c55e' : '#ef4444' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                      </button>
+                      <h4 style={{ margin: '0 0 8px 0', color: isApproved ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>flight_takeoff</span> Leave {isApproved ? 'Approved' : 'Rejected'}</h4>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{req.type === 'sick' ? 'Sick Leave' : req.type === 'summer' ? 'Summer Vacation' : req.type === 'festival' ? 'Festival' : 'Travel'}</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 13, color: isApproved ? '#16a34a' : '#dc2626' }}>Acted by: {req.actedBy}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Date: {req.date}</p>
                    </div>
                  );
                }

@@ -6,7 +6,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchTeacherPerformanceScore, fetchBatchAnalytics } from '../../utils/performanceMetrics';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label } from 'recharts';
 import TicketDrawer from '../TicketDrawer';
+import NotificationDrawer from '../NotificationDrawer';
 import { subscribeToInbox } from '../../services/tickets';
+import NotificationBell from '../NotificationBell';
+import { createNotification } from '../../services/notifications';
+
 function StudentFeedbackModal({ student, teacherName, teacherId, onClose }) {
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
@@ -438,6 +442,19 @@ export default function TeacherDashboard({ profile }) {
         status: 'pending',
         timestamp: serverTimestamp()
       });
+      
+      // Notify managers
+      await createNotification('branch_manager', 'leave_request_new', {
+        teacherName: profile?.fullName || 'Teacher',
+        type: leaveFormData.type,
+        days: days
+      });
+      await createNotification('service_manager', 'leave_request_new', {
+        teacherName: profile?.fullName || 'Teacher',
+        type: leaveFormData.type,
+        days: days
+      });
+
       alert("Leave Request Submitted successfully!");
       setLeaveModalOpen(false);
       setLeaveFormData({ type: 'summer', startDate: '', endDate: '', reason: '', days: '' });
@@ -466,11 +483,15 @@ export default function TeacherDashboard({ profile }) {
     const presentDays = workingDays - (month % 3); 
     const lateMarks = month % 4;
     const holidaysTook = (month % 2) + 1;
+    const absentDays = workingDays - presentDays;
+    const sundays = 4; // Mock sundays count
     return {
       workingDays,
+      absentDays,
       presentDays,
       lateMarks,
-      holidaysTook
+      holidaysTook,
+      sundays
     };
   };
 
@@ -899,76 +920,109 @@ export default function TeacherDashboard({ profile }) {
   // Sort by start time roughly
   todaysClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
+  // Create dynamic post-lecture reminders
+  const dynamicTeacherNotifications = [];
+  todaysClasses.forEach(cls => {
+    if (isLectureFinished(cls.endTime)) {
+      dynamicTeacherNotifications.push({
+        id: `local-post-lecture-${cls.id}`,
+        notifType: 'lecture',
+        topicName: cls.subject,
+        batch: cls.batch,
+        teacherName: profile?.fullName || 'Teacher',
+        durationHours: 2,
+        date: new Date().toLocaleDateString()
+      });
+    }
+  });
+
   return (
     <div>
       <div className="page-header" style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '48px', width: '100%' }}>
         
         {/* perfectly centered Animated Text Zone */}
-        <div className="quote-container" style={{ position: 'relative', width: '100%', boxSizing: 'border-box', height: '30px' }}>
+        <div className="quote-container" style={{ position: 'relative', width: '100%', boxSizing: 'border-box', height: '40px', paddingRight: '200px' }}>
           <h1 className="page-title quote-title" style={{ 
-            color: 'var(--brand-primary)', margin: 0, 
-            position: 'absolute', left: 0, right: 0, textAlign: 'center',
+            margin: 0, 
+            position: 'absolute', left: 0, right: 0, textAlign: 'left',
             opacity: showQuote ? 0 : 1, transform: showQuote ? 'translateY(-20px)' : 'translateY(0)',
             transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-            overflow: 'hidden', textOverflow: 'ellipsis'
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontFamily: "'Outfit', 'Inter', sans-serif",
+            fontSize: 'clamp(18px, 2.5vw, 28px)',
+            fontWeight: 800,
+            background: 'linear-gradient(90deg, var(--brand-primary) 0%, #f97316 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            letterSpacing: '-0.5px'
           }}>
-            We are happy to welcome you on board!
+            👋 We are happy to welcome you on board!
           </h1>
           <h1 className="page-title quote-text" style={{ 
-            color: 'var(--text-secondary)', margin: 0, fontStyle: 'italic', fontWeight: 500,
-            position: 'absolute', left: 0, right: 0, textAlign: 'center',
+            margin: 0, 
+            position: 'absolute', left: 0, right: 0, textAlign: 'left',
             opacity: showQuote ? 1 : 0, transform: showQuote ? 'translateY(0)' : 'translateY(20px)',
             transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-            overflow: 'hidden', textOverflow: 'ellipsis'
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontFamily: "'Outfit', 'Inter', sans-serif",
+            fontStyle: 'italic',
+            fontWeight: 500,
+            fontSize: 'clamp(15px, 2vw, 22px)',
+            letterSpacing: '0.3px',
+            color: '#6b7280' // subtle gray for the quote
           }}>
             "{quoteOfTheDay}"
           </h1>
         </div>
 
         {/* Right Buttons - Anchored to the edge */}
-        <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 12 }}>
+        <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 10 }}>
           {activeTab === 'dashboard_hub' ? (
             <button 
-              className="btn responsive-btn" 
+              className="btn" 
               onClick={() => handleTabChange('home')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
+              style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'var(--brand-primary)', color: 'white', border: 'none', transition: 'transform 0.2s' }}
+              title="Dashboard"
             >
-              <span className="material-symbols-outlined" style={{ color: 'white' }}>home</span>
-              <span className="hide-on-mobile" style={{ color: 'white' }}>Home</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>dashboard</span>
             </button>
           ) : (
             <button 
-              className="btn responsive-btn" 
+              className="btn" 
               onClick={() => handleTabChange('dashboard_hub')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'var(--brand-primary)', color: 'white', border: 'none' }}
+              style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'var(--brand-primary)', color: 'white', border: 'none', transition: 'transform 0.2s' }}
+              title="Home"
             >
-              <span className="material-symbols-outlined" style={{ color: 'white' }}>grid_view</span>
-              <span className="hide-on-mobile" style={{ color: 'white' }}>Dashboard</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>home</span>
             </button>
           )}
+          
           <button 
-            className="btn btn-ghost responsive-btn" 
+            className="btn btn-ghost" 
             onClick={() => setIProfileOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, border: '1px solid var(--surface-border)' }}
+            style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: '1px solid var(--surface-border)', background: 'white', transition: 'transform 0.2s' }}
+            title="Profile"
           >
-            <span className="material-symbols-outlined">person</span>
-            <span className="hide-on-mobile">Profile</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-primary)' }}>person</span>
           </button>
           
           <button 
-            className="btn btn-ghost responsive-btn"
+            className="btn btn-ghost"
             onClick={() => setIsTicketOpen(true)}
-            style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, border: '1px solid var(--surface-border)', color: 'var(--brand-primary)' }}
+            style={{ position: 'relative', width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: '1px solid var(--surface-border)', background: 'white', color: 'var(--brand-primary)', transition: 'transform 0.2s' }}
             title="Open Tickets"
           >
-            <span className="material-symbols-outlined">confirmation_number</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>confirmation_number</span>
             {hasNewTicketAlert && (
               <span style={{
-                position: 'absolute', top: 4, right: 12, width: 8, height: 8, 
-                backgroundColor: '#d32f2f', borderRadius: '50%', boxShadow: '0 0 0 2px var(--surface-bg)'
+                position: 'absolute', top: 8, right: 8, width: 8, height: 8, 
+                backgroundColor: '#d32f2f', borderRadius: '50%', boxShadow: '0 0 0 2px #fff'
               }} />
             )}
           </button>
+
+          {/* New Notification Button */}
+          <NotificationBell dynamicNotifications={dynamicTeacherNotifications} />
         </div>
       </div>
 
@@ -1009,51 +1063,57 @@ export default function TeacherDashboard({ profile }) {
       )}
 
       {activeTab === 'home' && (
-        <div className="portal-card" style={{ background: 'linear-gradient(145deg, var(--surface-bg), rgba(253,180,42,0.05))' }}>
-          <div className="responsive-grid-2" style={{ gap: 24 }}>
-            {/* Left Column */}
+        <div style={{ padding: '0 8px' }}>
+          <div className="responsive-grid-2" style={{ gap: 24, alignItems: 'flex-start' }}>
+            
+            {/* Left Column (Primary Focus) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <div style={{ background: 'var(--surface-bg)', padding: 24, borderRadius: 16, border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                <h3 style={{ fontSize: 20, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)', fontSize: 24 }}>calendar_month</span>
-                  Today's Schedule
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              
+              {/* Today's Schedule */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 18, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>calendar_today</span>
+                    Today's Schedule
+                  </h3>
+                  <span style={{ fontSize: 13, color: '#64748b', fontWeight: '500' }}>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {todaysClasses.length === 0 ? (
-                    <div style={{ padding: 20, background: 'rgba(0,0,0,0.02)', borderRadius: 12, textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 32, opacity: 0.5, marginBottom: 8 }}>event_available</span>
-                      <br/>You have no classes scheduled for today. Enjoy your day!
+                    <div style={{ padding: 32, background: '#f8fafc', borderRadius: 12, textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 32, marginBottom: 8 }}>event_available</span>
+                      <br/>No classes scheduled today. Enjoy your day!
                     </div>
                   ) : (
                     todaysClasses.map(cls => {
                       const finished = isLectureFinished(cls.endTime);
                       return (
                         <div key={cls.id} style={{ 
-                          padding: 16, 
-                          background: finished ? 'rgba(253,180,42,0.08)' : '#ffffff', 
+                          padding: '16px 20px', 
+                          background: finished ? '#f8fafc' : '#ffffff', 
                           borderRadius: 12, 
-                          border: `1px solid ${finished ? 'rgba(253,180,42,0.2)' : 'var(--surface-border)'}`,
-                          borderLeft: `4px solid ${finished ? 'var(--brand-primary)' : 'var(--text-muted)'}`,
+                          border: `1px solid ${finished ? '#e2e8f0' : '#e2e8f0'}`,
+                          borderLeft: `4px solid ${finished ? '#10b981' : 'var(--brand-primary)'}`,
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 8,
-                          transition: 'transform 0.2s, box-shadow 0.2s',
-                          cursor: 'default'
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
-                        >
+                          gap: 10,
+                          transition: 'all 0.2s',
+                        }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <strong style={{ fontSize: 16, color: finished ? 'var(--brand-primary)' : 'var(--text-primary)' }}>{cls.startTime} - {cls.endTime}</strong>
-                            {finished && <span className="material-symbols-outlined" style={{ color: 'var(--status-success)', fontSize: 20 }}>check_circle</span>}
+                            <strong style={{ fontSize: 15, color: finished ? '#64748b' : '#0f172a' }}>{cls.startTime} - {cls.endTime}</strong>
+                            {finished && <span className="material-symbols-outlined" style={{ color: '#10b981', fontSize: 18 }}>check_circle</span>}
                           </div>
-                          <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span> {cls.batch} ({cls.subject})
+                          <div style={{ fontSize: 14, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span> 
+                            <span style={{ fontWeight: '500' }}>{cls.batch}</span> <span style={{ opacity: 0.7 }}>({cls.subject})</span>
                           </div>
                           {finished && (
-                            <div style={{ marginTop: 8 }}>
-                               <button className="btn btn-brand btn-sm" onClick={() => setPostLectureModal({ isOpen: true, classData: cls })} style={{ width: '100%', justifyContent: 'center' }}>
-                                 <span className="material-symbols-outlined" style={{ fontSize: 18, marginRight: 6 }}>assignment_add</span> Fill Post-Lecture Report
+                            <div style={{ marginTop: 6 }}>
+                               <button className="btn btn-ghost btn-sm" onClick={() => setPostLectureModal({ isOpen: true, classData: cls })} style={{ width: '100%', justifyContent: 'center', border: '1px solid #e2e8f0', color: '#3b82f6', background: '#eff6ff' }}>
+                                 <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 6 }}>assignment_add</span> Fill Post-Lecture Report
                                </button>
                             </div>
                           )}
@@ -1063,129 +1123,183 @@ export default function TeacherDashboard({ profile }) {
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Right Column */}
+              {/* Leave Requests Moved to Left Column */}
+              {leaveRequests.length > 0 && (
+                <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 18, color: '#1e293b', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>flight_takeoff</span>
+                    My Leave Requests
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {leaveRequests.map(req => (
+                      <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 'bold', color: '#334155', fontSize: 14 }}>
+                            {req.type === 'summer' ? 'Summer Vacation' : req.type === 'sick' ? 'Sick Leave' : req.type === 'festival' ? 'Festival' : 'Travel'}
+                          </p>
+                          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>
+                            {req.startDate} to {req.endDate} ({req.totalDays} Days)
+                          </p>
+                        </div>
+                        <div>
+                          <span style={{
+                            padding: '4px 10px', borderRadius: '12px', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px',
+                            background: req.status === 'approved' ? '#dcfce7' : req.status === 'rejected' ? '#fee2e2' : '#fef3c7',
+                            color: req.status === 'approved' ? '#15803d' : req.status === 'rejected' ? '#b91c1c' : '#b45309'
+                          }}>
+                            {req.status === 'approved' ? 'Approved' : req.status === 'rejected' ? 'Rejected' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Right Column (Widgets) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <div style={{ background: 'var(--surface-bg)', padding: 20, borderRadius: 12, border: '1px solid var(--surface-border)' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              
+              {/* Small Professional Countdown Widget */}
+              <div style={{ 
+                background: 'linear-gradient(135deg, #ffffff, #f8fafc)', 
+                padding: '20px 24px', 
+                borderRadius: 16, 
+                border: '1px solid #e2e8f0', 
+                boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: '12px', background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 26 }}>timer</span>
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b', fontWeight: 'bold' }}>Board Exams</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>Target Preparation</p>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: 32, fontWeight: '900', color: '#ef4444', lineHeight: 1 }}>{boardDaysLeft}</span>
+                  <div style={{ fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 4 }}>Days Left</div>
+                </div>
+              </div>
+
+              {/* My Yearly Targets */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>sports_score</span>
                   My Yearly Targets
                 </h3>
-                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {!profile?.yearlyTarget ? (
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No targets assigned yet.</span>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>No targets assigned yet.</span>
                   ) : (
                     profile.yearlyTarget.split(' | ').filter(Boolean).map((target, idx) => (
-                      <div key={idx} style={{ padding: '10px 14px', background: 'rgba(253,180,42,0.05)', borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', border: '1px solid rgba(253,180,42,0.2)', borderLeft: '4px solid var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div key={idx} style={{ 
+                        padding: '12px 16px', 
+                        background: '#f8fafc', 
+                        borderRadius: 10, 
+                        fontSize: 14, 
+                        color: '#334155', 
+                        border: '1px solid #f1f5f9', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 12 
+                      }}>
                         <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--brand-primary)' }}>adjust</span>
-                        {target}
+                        <span style={{ fontWeight: '500' }}>{target}</span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
 
-              <div style={{ background: 'var(--surface-bg)', padding: 24, borderRadius: 16, border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                  <div>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 20, margin: 0 }}>
-                      <span className="material-symbols-outlined" style={{ color: 'var(--status-success)' }}>track_changes</span>
-                      My Weekly Targets
-                    </h3>
-                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, marginBottom: 0 }}>Checkpoints set by your Manager for this week.</p>
-                  </div>
-                </div>
+              {/* My Weekly Targets */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#10b981' }}>track_changes</span>
+                  My Weekly Targets
+                </h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px 0' }}>Checkpoints set by your Manager for this week.</p>
 
-                {profile?.currentWeeklyTargets?.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: '500' }}>
-                      <span>Overall Progress</span>
-                      <strong style={{ color: 'var(--status-success)' }}>
-                        {profile.currentWeeklyTargets.filter(t => t.completed).length}/{profile.currentWeeklyTargets.length} Completed
-                      </strong>
+                {profile?.currentWeeklyTargets?.length > 0 ? (
+                  <>
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: '600' }}>
+                        <span style={{ color: '#475569' }}>Overall Progress</span>
+                        <span style={{ color: '#10b981' }}>
+                          {profile.currentWeeklyTargets.filter(t => t.completed).length}/{profile.currentWeeklyTargets.length}
+                        </span>
+                      </div>
+                      <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                         <div style={{ 
+                           width: `${(profile.currentWeeklyTargets.filter(t => t.completed).length / profile.currentWeeklyTargets.length) * 100}%`, 
+                           height: '100%', 
+                           background: '#10b981', 
+                           borderRadius: 4,
+                           transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+                         }}></div>
+                      </div>
                     </div>
-                    <div style={{ width: '100%', height: 8, background: 'var(--surface-border)', borderRadius: 4, overflow: 'hidden' }}>
-                       <div style={{ 
-                         width: `${(profile.currentWeeklyTargets.filter(t => t.completed).length / profile.currentWeeklyTargets.length) * 100}%`, 
-                         height: '100%', 
-                         background: 'var(--status-success)', 
-                         borderRadius: 4,
-                         transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-                       }}></div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {profile.currentWeeklyTargets.map((target, idx) => (
+                        <label key={target.id || idx} style={{ 
+                          display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
+                          background: target.completed ? '#f0fdf4' : '#f8fafc', 
+                          borderRadius: 10, 
+                          border: `1px solid ${target.completed ? '#bbf7d0' : '#e2e8f0'}`, 
+                          cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = target.completed ? '#86efac' : '#cbd5e1'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = target.completed ? '#bbf7d0' : '#e2e8f0'; }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            style={{ width: 18, height: 18, accentColor: '#10b981', cursor: 'pointer', margin: 0 }}
+                            checked={target.completed}
+                            onChange={() => toggleWeeklyTarget(idx)}
+                          />
+                          <span style={{ fontSize: 14, color: target.completed ? '#94a3b8' : '#334155', textDecoration: target.completed ? 'line-through' : 'none', fontWeight: '500', transition: 'all 0.2s' }}>
+                            {target.title}
+                          </span>
+                        </label>
+                      ))}
                     </div>
+                  </>
+                ) : (
+                  <div style={{ padding: 24, background: '#f8fafc', borderRadius: 12, textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1' }}>
+                    No weekly targets assigned yet.
                   </div>
                 )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {!profile?.currentWeeklyTargets || profile.currentWeeklyTargets.length === 0 ? (
-                    <div style={{ padding: 16, background: 'rgba(0,0,0,0.02)', borderRadius: 12, textAlign: 'center', color: 'var(--text-muted)' }}>
-                      No weekly targets assigned yet.
-                    </div>
-                  ) : (
-                    profile.currentWeeklyTargets.map((target, idx) => (
-                      <label key={target.id || idx} style={{ 
-                        display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 16px', 
-                        background: target.completed ? 'rgba(52,211,153,0.05)' : '#ffffff', 
-                        borderRadius: 12, 
-                        border: `1px solid ${target.completed ? 'rgba(52,211,153,0.3)' : 'var(--surface-border)'}`, 
-                        cursor: 'pointer', transition: 'all 0.2s',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-                      }}>
-                        <input 
-                          type="checkbox" 
-                          style={{ marginTop: 4, width: 18, height: 18, accentColor: 'var(--status-success)', cursor: 'pointer' }}
-                          checked={target.completed}
-                          onChange={() => toggleWeeklyTarget(idx)}
-                        />
-                        <span style={{ fontSize: 15, color: target.completed ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: target.completed ? 'line-through' : 'none', lineHeight: 1.4, transition: 'all 0.2s' }}>
-                          {target.title}
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
               </div>
 
-              <div style={{ background: 'var(--surface-bg)', padding: 20, borderRadius: 12, border: '1px solid var(--surface-border)' }}>
-                <h3>Batch Wise Report & Record Keeping</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Select a batch to view detailed progress logs and test performance.</p>
-                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {/* Batch Wise Report & Record Keeping */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>folder_supervised</span>
+                  Batch Records
+                </h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px 0' }}>Select a batch to view detailed progress logs and test performance.</p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {assignedBatches.map(b => (
-                    <span key={b} className="badge badge-teacher" style={{ cursor: 'pointer' }} onClick={() => handleTabChange('batches')}>{b}</span>
+                    <button key={b} onClick={() => handleTabChange('batches')} style={{
+                      padding: '8px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px',
+                      fontSize: 13, fontWeight: '600', color: '#475569', cursor: 'pointer', transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                    >
+                      {b}
+                    </button>
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Leave Requests Tracker */}
-            {leaveRequests.length > 0 && (
-              <div className="portal-card" style={{ marginTop: 20 }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>My Leave Requests</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {leaveRequests.map(req => (
-                    <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                      <div>
-                        <p style={{ margin: 0, fontWeight: 'bold', color: '#1e293b' }}>
-                          {req.type === 'summer' ? 'Summer Vacation' : req.type === 'sick' ? 'Sick Leave' : req.type === 'festival' ? 'Festival' : 'Travel'}
-                        </p>
-                        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-                          {req.startDate} to {req.endDate} ({req.totalDays} Days)
-                        </p>
-                      </div>
-                      <div>
-                        <span className="badge" style={{
-                          background: req.status === 'approved' ? '#e8f5e9' : req.status === 'rejected' ? '#ffebee' : '#fff3e0',
-                          color: req.status === 'approved' ? '#2e7d32' : req.status === 'rejected' ? '#c62828' : '#e65100'
-                        }}>
-                          {req.status === 'approved' ? 'Approved' : req.status === 'rejected' ? 'Rejected' : 'Pending Approval'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -1193,13 +1307,6 @@ export default function TeacherDashboard({ profile }) {
       {activeTab === 'dashboard_hub' && (
         <div style={{ padding: '0 8px' }}>
            <h2 style={{ marginBottom: 24, color: 'var(--text-primary)', fontSize: 24 }}>{profile?.fullName || 'Teacher'}'s Arena</h2>
-           
-           {/* Top Widget - Board Countdown */}
-           <div className="portal-card" style={{ cursor: 'pointer', textAlign: 'center', background: 'linear-gradient(135deg, #f0932b, #ff7f50)', color: 'white', marginBottom: 24, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-             <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'white', marginBottom: 12 }}>timer</span>
-             <h2 style={{ color: 'white', margin: 0, fontSize: 28 }}>Board Exam Countdown</h2>
-             <p style={{ marginTop: 12, fontSize: 48, fontWeight: '800', color: 'white', letterSpacing: '2px', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>{boardDaysLeft} <span style={{ fontSize: 24, fontWeight: 'normal' }}>Days Left</span></p>
-           </div>
 
            {/* Grid */}
            <div className="grid-auto-300">
@@ -1308,20 +1415,28 @@ export default function TeacherDashboard({ profile }) {
                    <h3 style={{ color: '#0369a1', margin: '0 0 12px 0', fontSize: 16 }}>Monthly Statistics (Click to Flip)</h3>
                    <div className="grid-2" style={{ gap: 12, flex: 1 }}>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#0284c7', fontWeight: 'bold' }}>Total Working Days</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#0284c7', fontWeight: 'bold' }}>Working Days</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#0369a1' }}>{monthlyStats.workingDays}</p>
                      </div>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#16a34a', fontWeight: 'bold' }}>Days Present</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#e11d48', fontWeight: 'bold' }}>Absent</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#be123c' }}>{monthlyStats.absentDays}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#16a34a', fontWeight: 'bold' }}>Present</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#15803d' }}>{monthlyStats.presentDays}</p>
                      </div>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#ea580c', fontWeight: 'bold' }}>Late Marks</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#ea580c', fontWeight: 'bold' }}>Late</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#c2410c' }}>{monthlyStats.lateMarks}</p>
                      </div>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#9333ea', fontWeight: 'bold' }}>Holidays Took</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#9333ea', fontWeight: 'bold' }}>Holiday Took</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#7e22ce' }}>{monthlyStats.holidaysTook}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#64748b', fontWeight: 'bold' }}>Sunday</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#475569' }}>{monthlyStats.sundays}</p>
                      </div>
                    </div>
                 </div>
@@ -1349,8 +1464,10 @@ export default function TeacherDashboard({ profile }) {
                          <Pie
                            data={[
                              { name: 'Present', value: monthlyStats.presentDays, color: '#4caf50' },
+                             { name: 'Absent', value: monthlyStats.absentDays, color: '#f44336' },
                              { name: 'Late', value: monthlyStats.lateMarks, color: '#ff9800' },
-                             { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' }
+                             { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' },
+                             { name: 'Sundays', value: monthlyStats.sundays, color: '#607d8b' }
                            ].filter(d => d.value > 0)}
                            cx="50%"
                            cy="50%"
@@ -1379,8 +1496,10 @@ export default function TeacherDashboard({ profile }) {
                            {
                              [
                                { name: 'Present', value: monthlyStats.presentDays, color: '#4caf50' },
+                               { name: 'Absent', value: monthlyStats.absentDays, color: '#f44336' },
                                { name: 'Late', value: monthlyStats.lateMarks, color: '#ff9800' },
-                               { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' }
+                               { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' },
+                               { name: 'Sundays', value: monthlyStats.sundays, color: '#607d8b' }
                              ].filter(d => d.value > 0).map((entry, index) => (
                                <Cell key={`cell-${index}`} fill={entry.color} />
                              ))
@@ -3153,6 +3272,7 @@ export default function TeacherDashboard({ profile }) {
 
       {/* Global Ticket Drawer for Teachers */}
       <TicketDrawer isOpen={isTicketOpen} onClose={() => setIsTicketOpen(false)} />
+
     </div>
   );
 }

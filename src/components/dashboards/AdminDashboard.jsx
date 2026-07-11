@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import NotificationBell from '../NotificationBell';
 
 const ROLE_COLORS = {
   admin: 'badge-admin',
@@ -175,6 +176,9 @@ export default function AdminDashboard({ profile }) {
           <p className="page-subtitle">
             Shishyakul Global Branch Analytics & Overview.
           </p>
+        </div>
+        <div>
+          <NotificationBell />
         </div>
       </div>
 

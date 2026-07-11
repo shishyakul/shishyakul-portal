@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigate } from 'react-router-dom';
+import NotificationBell from '../NotificationBell';
 
 export default function FrontendDeskDashboard({ profile }) {
   const navigate = useNavigate();
@@ -77,6 +78,9 @@ export default function FrontendDeskDashboard({ profile }) {
         <div>
           <h1 className="page-title">Welcome, {profile?.fullName?.split(' ')[0] ?? 'Shruti Maam'} 👋</h1>
           <p className="page-subtitle">Front Desk Reception Hub</p>
+        </div>
+        <div>
+          <NotificationBell />
         </div>
       </div>
 

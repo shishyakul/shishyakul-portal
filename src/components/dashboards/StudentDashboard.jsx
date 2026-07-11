@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { createNotification } from '../../services/notifications';
 import TabPerformance from '../StudentPortfolio/TabPerformance';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BattalionNetwork from './BattalionNetwork';
@@ -257,6 +258,16 @@ export default function StudentDashboard({ profile }) {
         status: 'Pending',
         timestamp: serverTimestamp()
       });
+      
+      await createNotification('branch_manager', 'grievance_new', {
+        studentName: profile?.fullName || 'Student',
+        category: grievanceForm.category
+      });
+      await createNotification('service_manager', 'grievance_new', {
+        studentName: profile?.fullName || 'Student',
+        category: grievanceForm.category
+      });
+
       setGrievanceForm({ category: '', description: '' });
       alert('Support ticket submitted successfully. The Service Manager will look into it.');
     } catch (err) {

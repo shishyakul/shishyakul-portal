@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import NotificationBell from '../NotificationBell';
 
 export default function ServiceManagerDashboard() {
   const navigate = useNavigate();
@@ -176,6 +177,9 @@ export default function ServiceManagerDashboard() {
         <div>
           <h1 className="page-title">Service Analytics Hub</h1>
           <p className="page-subtitle">Deep dive into operational, academic, and administrative metrics.</p>
+        </div>
+        <div>
+          <NotificationBell />
         </div>
       </div>
 

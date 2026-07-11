@@ -60,8 +60,8 @@ const NAV_CONFIG = {
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
   ],
   teacher: [
-    { to: '/dashboard#dashboard_hub', icon: 'grid_view',     label: 'Dashboard' },
-    { to: '/dashboard#home',      icon: 'home',            label: 'Home' },
+    { to: '/dashboard#home',      icon: 'dashboard',            label: 'Dashboard' },
+    { to: '/dashboard#dashboard_hub', icon: 'home',     label: 'Home' },
     { to: '/dashboard#batches',   icon: 'groups',          label: 'My Batches' },
     { to: '/dashboard#timetable', icon: 'dashboard',       label: 'My Timetable' },
     { to: '/dashboard#materials', icon: 'auto_stories',    label: 'Course Materials' },
@@ -253,7 +253,7 @@ export default function Sidebar({ isOpen, onClose }) {
       </nav>
 
       {/* User footer */}
-      {profile?.role !== 'teacher' && (
+      {profile?.role !== 'teacher' ? (
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <div className="sidebar-avatar">
@@ -266,6 +266,29 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
           <button className="sidebar-logout-btn" onClick={logout} title="Logout">
             <span className="material-symbols-outlined">logout</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ padding: '16px', marginTop: 'auto' }}>
+          <button 
+            className="btn btn-outline" 
+            onClick={logout}
+            style={{ 
+              width: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '8px', 
+              color: '#ef4444', 
+              borderColor: '#ef4444',
+              borderRadius: '8px',
+              padding: '10px 0',
+              fontWeight: 600,
+              transition: 'all 0.2s'
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>logout</span>
+            Logout
           </button>
         </div>
       )}
