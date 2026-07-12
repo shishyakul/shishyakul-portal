@@ -63,6 +63,7 @@ const NAV_CONFIG = {
     { to: '/dashboard#home',      icon: 'dashboard',            label: 'Dashboard' },
     { to: '/dashboard#dashboard_hub', icon: 'home',     label: 'Home' },
     { to: '/dashboard#batches',   icon: 'groups',          label: 'My Batches' },
+    { to: '/students',            icon: 'school',          label: 'Students' },
     { to: '/dashboard#timetable', icon: 'dashboard',       label: 'My Timetable' },
     { to: '/dashboard#materials', icon: 'auto_stories',    label: 'Course Materials' },
     { to: '/dashboard#grading',   icon: 'grading',         label: 'Grading & Submissions' },

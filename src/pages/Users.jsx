@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { BATCH_DEF } from './Batches';
+import { createNotification } from '../services/notifications';
 
 const ROLES = ['teacher'];
 const SUBJECTS = ['Mathematics', 'Science', 'SST', 'English', 'Hindi', 'Marathi', 'Sanskrit', 'Physics', 'Chemistry', 'Biology', 'Computer', 'Economics', 'Accounts'];
@@ -589,6 +590,7 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
   const [rating, setRating] = useState(0);
   const [impression, setImpression] = useState('');
   const [review, setReview] = useState('');
+  const [impressiveAreas, setImpressiveAreas] = useState('');
   const [focusArea, setFocusArea] = useState('');
   const [weeklyTargets, setWeeklyTargets] = useState(['']);
   const [saving, setSaving] = useState(false);
@@ -616,6 +618,7 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
         rating,
         impression,
         review: review.trim(),
+        impressiveAreas: impressiveAreas.trim(),
         focusArea: focusArea.trim(),
         targets: validTargets,
         managerId: 'Service Manager'
@@ -627,6 +630,14 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
         managerFeedbacks: arrayUnion(fbData),
         currentWeeklyTargets: targetObjects
       });
+
+      await createNotification(teacher.id, 'manager_feedback', {
+        rating: fbData.rating,
+        impression: fbData.impression,
+        managerName: fbData.managerId || 'Service Manager',
+        date: new Date().toLocaleDateString()
+      });
+
       onSaved();
       onClose();
     } catch (e) {
@@ -638,7 +649,7 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-box" style={{ maxWidth: 600 }}>
+      <div className="modal-box" style={{ maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
         <h2 className="modal-title">Submit Weekly Feedback</h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
           Providing feedback for <strong>{teacher.fullName}</strong>
@@ -680,6 +691,11 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
         <div className="form-group">
           <label className="form-label">Detailed Review</label>
           <textarea className="portal-input" style={{ minHeight: 80 }} placeholder="Write your professional feedback here..." value={review} onChange={e => setReview(e.target.value)} />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Impressive Areas After Detailed Review</label>
+          <textarea className="portal-input" style={{ minHeight: 60 }} placeholder="List positive observations or achievements..." value={impressiveAreas} onChange={e => setImpressiveAreas(e.target.value)} />
         </div>
 
         <div className="form-group">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import './StudentsDirectory.css';
@@ -11,6 +12,7 @@ import TabFees from '../components/StudentPortfolio/TabFees';
 import TabAssets from '../components/StudentPortfolio/TabAssets';
 
 export default function StudentsDirectory() {
+  const { profile } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -63,7 +65,13 @@ export default function StudentsDirectory() {
   useEffect(() => {
     const q = query(collection(db, 'students'), where('status', '==', 'admitted'), limit(limitCount));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      if (profile?.role === 'teacher') {
+        const assigned = profile.assignedBatches || [];
+        docs = docs.filter(s => assigned.includes(s.batch));
+      }
+
       setStudents(docs);
       if (!selectedStudent && docs.length > 0) {
         setSelectedStudent(docs[0]);

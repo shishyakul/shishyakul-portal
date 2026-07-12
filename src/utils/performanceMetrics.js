@@ -16,7 +16,7 @@ import { db } from '../firebase';
  * @returns {Promise<number>} - The calculated score out of 100
  */
 export const fetchTeacherPerformanceScore = async (teacherId) => {
-  const cacheKey = `teacher_perf_v2_${teacherId}`;
+  const cacheKey = `teacher_perf_v3_${teacherId}`;
   const cachedData = sessionStorage.getItem(cacheKey);
   
   if (cachedData) {
@@ -29,7 +29,7 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
   try {
     // 1. Fetch Teacher Profile
     const teacherDoc = await getDoc(doc(db, 'users', teacherId));
-    let feedbackScore = 20; 
+    let feedbackScore = 40; 
     let taskScore = 20;
     
     if (teacherDoc.exists()) {
@@ -37,7 +37,7 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
       const feedbacks = data.managerFeedbacks || [];
       if (feedbacks.length > 0) {
         const avgStars = feedbacks.reduce((acc, fb) => acc + (fb.rating || 3), 0) / feedbacks.length;
-        feedbackScore = (avgStars / 5) * 20;
+        feedbackScore = (avgStars / 5) * 40;
       }
 
       const weeklyTargets = data.currentWeeklyTargets || [];
@@ -47,25 +47,11 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
       }
     }
 
-    // 3. Attendance (Mocking 20/20 for now)
-    const attendanceScore = 20; 
+    // 2. Attendance (Mocking 10/10 for now until biometrics integration)
+    const attendanceScore = 10; 
 
-    // 4. Syllabus & Tests (Real Data)
-    let syllabusScore = 20; 
-    let testScore = 20; 
-
-    const sylSnap = await getDocs(query(collection(db, 'lecture_reports'), where('teacherId', '==', teacherId)));
-    if (!sylSnap.empty) {
-      // For now, if they are filing reports, give them good syllabus score.
-      // Or calculate based on amount taught if possible.
-      // The user asked for "syllabus progress", but lecture_reports don't have a numeric % complete easily unless we parse it.
-      // Let's just give them 20 if they are active, or if we want to be strict, we can count the number of reports this week.
-      // We will count it as 20 if they have >= 3 reports.
-      const reports = sylSnap.size;
-      syllabusScore = Math.min((reports / 3) * 20, 20);
-    } else {
-      syllabusScore = 0; // No reports filed
-    }
+    // 3. Tests (Real Data from Batches)
+    let testScore = 30; 
 
     const teacherData = teacherDoc.exists() ? teacherDoc.data() : {};
     const assignedBatches = teacherData.assignedBatches || [];
@@ -81,24 +67,23 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
         }
         if (validBatches > 0) {
             const overallAvgMarks = totalAvgMarks / validBatches; // 0-100
-            testScore = (overallAvgMarks / 100) * 20;
+            testScore = (overallAvgMarks / 100) * 30;
         } else {
             testScore = 0; // No tests conducted yet
         }
     }
 
-    const finalScore = Math.round(feedbackScore + taskScore + attendanceScore + syllabusScore + testScore);
+    const finalScore = Math.round(feedbackScore + taskScore + attendanceScore + testScore);
     
     let lowest = 'Tasks';
-    let minScore = taskScore;
-    if (attendanceScore < minScore) { lowest = 'Attendance'; minScore = attendanceScore; }
-    if (feedbackScore < minScore) { lowest = 'Feedback'; minScore = feedbackScore; }
-    if (syllabusScore < minScore) { lowest = 'Syllabus'; minScore = syllabusScore; }
-    if (testScore < minScore) { lowest = 'Tests'; minScore = testScore; }
+    let minScoreRatio = taskScore / 20;
+    
+    if ((attendanceScore / 10) < minScoreRatio) { lowest = 'Attendance'; minScoreRatio = attendanceScore / 10; }
+    if ((feedbackScore / 40) < minScoreRatio) { lowest = 'Feedback'; minScoreRatio = feedbackScore / 40; }
+    if ((testScore / 30) < minScoreRatio) { lowest = 'Tests'; minScoreRatio = testScore / 30; }
 
     let advice = 'Keep up the great work!';
     if (lowest === 'Feedback') advice = 'Your manager feedback average is your lowest metric. Try asking for specific areas to improve.';
-    if (lowest === 'Syllabus') advice = 'Your syllabus progress is lagging behind expectations. Try to cover more ground this week.';
     if (lowest === 'Attendance') advice = 'Your attendance/punctuality score is low. Ensure you punch in on time.';
     if (lowest === 'Tasks') advice = 'You have pending weekly tasks. Try to clear your checklist.';
     if (lowest === 'Tests') advice = 'Class test averages are low. Focus on student fundamentals.';
@@ -109,7 +94,6 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
         attendance: Math.round(attendanceScore),
         feedback: Math.round(feedbackScore),
         tasks: Math.round(taskScore),
-        syllabus: Math.round(syllabusScore),
         tests: Math.round(testScore)
       },
       advice
@@ -124,7 +108,7 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
 
   } catch (err) {
     console.error("Failed to calculate teacher performance:", err);
-    return { totalScore: 65, breakdown: { attendance: 18, feedback: 15, tasks: 15, syllabus: 10, tests: 7 }, advice: 'Keep up the good work!' };
+    return { totalScore: 65, breakdown: { attendance: 8, feedback: 25, tasks: 15, tests: 17 }, advice: 'Keep up the good work!' };
   }
 };
 

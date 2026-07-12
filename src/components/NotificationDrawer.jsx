@@ -186,6 +186,20 @@ export default function NotificationDrawer({ isOpen, onClose, notifications = []
                  );
                }
 
+               if (req.notifType === 'manager_feedback') {
+                 return (
+                   <div key={req.id} style={{ padding: 16, border: '1px solid #fde68a', borderRadius: 12, background: '#fffbeb', position: 'relative' }}>
+                      <button onClick={() => onDismiss(req.id)} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                      </button>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>stars</span> New Manager Feedback</h4>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{req.impression} ({req.rating} Stars)</p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#d97706' }}>From: {req.managerName}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Date: {req.date}</p>
+                   </div>
+                 );
+               }
+
                return null;
             })}
           </div>

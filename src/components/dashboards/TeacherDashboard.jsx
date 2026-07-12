@@ -319,11 +319,13 @@ export default function TeacherDashboard({ profile }) {
   const [postLectureModal, setPostLectureModal] = useState({ isOpen: false, classData: null });
 
   const [testRecords, setTestRecords] = useState([]);
+  const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
   const [viewTestRecord, setViewTestRecord] = useState(null);
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
 
   const [feedbackStudent, setFeedbackStudent] = useState(null);
   const [teacherAttendanceRecords, setTeacherAttendanceRecords] = useState([]);
+  const [selectedMetric, setSelectedMetric] = useState('Feedbacks');
 
   // Fetch Teacher Attendance from Firebase
   useEffect(() => {
@@ -1089,6 +1091,7 @@ export default function TeacherDashboard({ profile }) {
             {/* Left Column (Primary Focus) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               
+
               {/* Today's Schedule */}
               <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -1204,6 +1207,121 @@ export default function TeacherDashboard({ profile }) {
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: 32, fontWeight: '900', color: '#ef4444', lineHeight: 1 }}>{boardDaysLeft}</span>
                   <div style={{ fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 4 }}>Days Left</div>
+                </div>
+              </div>
+
+              {/* Upcoming Saturday Test Duties */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#e65100' }}>notification_important</span>
+                  Upcoming Saturday Test Duties
+                  <span style={{ fontSize: 13, color: '#64748b', fontWeight: '500', marginLeft: 'auto' }}>{saturdayDateStr}</span>
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* PREPARATION DUTIES */}
+                  <div>
+                    <h4 style={{ fontSize: 14, color: '#475569', margin: '0 0 10px 0', borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>My Preparation Duties</h4>
+                    {upcomingTestDuties.filter(d => d.isPreparer).length === 0 ? (
+                      <div style={{ fontSize: 13, color: '#94a3b8', fontStyle: 'italic', padding: '8px 0' }}>No preparation duties this week.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {upcomingTestDuties.filter(d => d.isPreparer).map((duty, idx) => (
+                           <div key={`prep-${idx}`} style={{ background: duty.workflow?.status === 'final_published' ? '#e8f5e9' : '#fff3e0', padding: '12px', borderRadius: '8px', border: duty.workflow?.status === 'final_published' ? '1px solid #a5d6a7' : '1px solid #ffe0b2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                              <div>
+                                <strong style={{ fontSize: '14px', display: 'block', color: duty.workflow?.status === 'final_published' ? '#2e7d32' : '#e65100' }}>{duty.batch} - Weekly Test</strong>
+                                <span style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: 4 }}>Syllabus: {duty.topic || 'N/A'}</span>
+                                <span style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: 2 }}>Checker: <strong>{duty.checkName}</strong></span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                {(!duty.workflow || duty.workflow.status === 'draft_submitted') && (
+                                  <button 
+                                    className="btn-primary btn-sm"
+                                    onClick={() => setDraftModal({ isOpen: true, duty, link: '', startDate: saturdayDateStr })}
+                                    style={{ background: duty.workflow?.status === 'draft_submitted' ? '#4caf50' : '#f97316' }}
+                                  >
+                                    {duty.workflow?.status === 'draft_submitted' ? 'Draft Submitted ✓' : 'Submit Draft Link'}
+                                  </button>
+                                )}
+                                {duty.workflow?.finalLink && (
+                                  <a href={duty.workflow.finalLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
+                                    Test Paper
+                                  </a>
+                                )}
+                                {duty.workflow?.solutionsLink && (
+                                  <a href={duty.workflow.solutionsLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#e3f2fd', color: '#1565c0', border: '1px solid #bbdefb', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>task_alt</span>
+                                    Solutions
+                                  </a>
+                                )}
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+              
+                  {/* CHECKING DUTIES */}
+                  <div>
+                    <h4 style={{ fontSize: 14, color: '#475569', margin: '0 0 10px 0', borderBottom: '1px solid #e2e8f0', paddingBottom: 6 }}>My Checking Duties</h4>
+                    {upcomingTestDuties.filter(d => d.isChecker).length === 0 ? (
+                      <div style={{ fontSize: 13, color: '#94a3b8', fontStyle: 'italic', padding: '8px 0' }}>No checking duties this week.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {upcomingTestDuties.filter(d => d.isChecker).map((duty, idx) => (
+                           <div key={`check-${idx}`} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                              <div>
+                                <strong style={{ fontSize: '14px', display: 'block', color: '#0f172a' }}>{duty.batch} - Weekly Test</strong>
+                                <span style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: 4 }}>Syllabus: {duty.topic || 'N/A'}</span>
+                                <span style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: 2 }}>Prepared By: <strong>{duty.prepName}</strong></span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                {duty.workflow?.status === 'final_published' ? (
+                                  <>
+                                    {duty.workflow?.finalLink && (
+                                      <a href={duty.workflow.finalLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
+                                        Test Paper
+                                      </a>
+                                    )}
+                                    {duty.workflow?.solutionsLink && (
+                                      <a href={duty.workflow.solutionsLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#e3f2fd', color: '#1565c0', border: '1px solid #bbdefb', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>task_alt</span>
+                                        Solutions
+                                      </a>
+                                    )}
+                                    <button className="btn-primary btn-sm" style={{ background: '#3b82f6', border: 'none', padding: '6px 12px', fontSize: 12 }} onClick={async () => {
+                                      const { getDocs, query, collection, where } = await import('firebase/firestore');
+                                      const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', duty.batch)));
+                                      const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+              
+                                      setGradingModal({ 
+                                        isOpen: true, 
+                                        testId: duty.testId, 
+                                        batch: duty.batch, 
+                                        maxMarks: 0,
+                                        testDate: saturdayDateStr,
+                                        subject: duty.subject,
+                                        topic: duty.topic,
+                                        batchStudents
+                                      });
+                                      const initialMarks = {};
+                                      batchStudents.forEach(s => {
+                                        initialMarks[s.id] = '';
+                                      });
+                                      setMarksData(initialMarks);
+                                    }}>Enter Marks</button>
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: 12, color: '#f59e0b', background: '#fef3c7', padding: '4px 8px', borderRadius: 4, border: '1px solid #fde68a' }}>Waiting for Final Paper...</span>
+                                )}
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2005,39 +2123,172 @@ export default function TeacherDashboard({ profile }) {
             <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>Performance Dashboard</h2>
           </div>
           
-          <div className="portal-card" style={{ marginBottom: 24, textAlign: 'center', background: 'linear-gradient(135deg, #e3f2fd, #bbdefb)', border: 'none', padding: '40px 20px' }}>
-             <h3 style={{ margin: '0 0 16px 0', color: '#1565c0', fontSize: 20 }}>Overall Performance Score</h3>
-             
-             <div style={{ position: 'relative', width: 160, height: 160, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'white', boxShadow: '0 8px 24px rgba(21,101,192,0.15)', border: `8px solid ${perfData.totalScore >= 80 ? '#4caf50' : perfData.totalScore >= 60 ? '#fbc02d' : '#f44336'}` }}>
-               <div>
-                 <span style={{ fontSize: 48, fontWeight: '900', color: '#1565c0', lineHeight: 1 }}>{perfData.totalScore}</span>
-                 <span style={{ display: 'block', fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>out of 100</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24, marginBottom: 24 }}>
+            {/* Left Block */}
+            <div className="portal-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #e3f2fd, #bbdefb)', border: 'none', padding: '40px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '300px' }}>
+               <h3 style={{ margin: '0 0 16px 0', color: '#1565c0', fontSize: 20 }}>Overall Performance Score</h3>
+               
+               <div style={{ position: 'relative', width: 160, height: 160, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'white', boxShadow: '0 8px 24px rgba(21,101,192,0.15)', border: `8px solid ${perfData.totalScore >= 80 ? '#4caf50' : perfData.totalScore >= 60 ? '#fbc02d' : '#f44336'}` }}>
+                 <div>
+                   <span style={{ fontSize: 48, fontWeight: '900', color: '#1565c0', lineHeight: 1 }}>{perfData.totalScore}</span>
+                   <span style={{ display: 'block', fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>out of 100</span>
+                 </div>
                </div>
-             </div>
-             
-             <div style={{ marginTop: 24 }}>
-               {perfData.totalScore >= 80 && <span className="badge" style={{ background: '#e8f5e9', color: '#2e7d32', fontSize: 14, padding: '8px 16px' }}>🥇 Top Performer</span>}
-               {perfData.totalScore >= 60 && perfData.totalScore < 80 && <span className="badge" style={{ background: '#fff8e1', color: '#f57f17', fontSize: 14, padding: '8px 16px' }}>🥈 Great Standing</span>}
-               {perfData.totalScore < 60 && <span className="badge" style={{ background: '#ffebee', color: '#c62828', fontSize: 14, padding: '8px 16px' }}>⚠️ Needs Attention</span>}
-             </div>
+               
+               <div style={{ marginTop: 24 }}>
+                 {perfData.totalScore >= 80 && <span className="badge" style={{ background: '#e8f5e9', color: '#2e7d32', fontSize: 14, padding: '8px 16px' }}>🥇 Top Performer</span>}
+                 {perfData.totalScore >= 60 && perfData.totalScore < 80 && <span className="badge" style={{ background: '#fff8e1', color: '#f57f17', fontSize: 14, padding: '8px 16px' }}>🥈 Great Standing</span>}
+                 {perfData.totalScore < 60 && <span className="badge" style={{ background: '#ffebee', color: '#c62828', fontSize: 14, padding: '8px 16px' }}>⚠️ Needs Attention</span>}
+               </div>
+            </div>
+
+            {/* Right Block */}
+            <div className="portal-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '32px', minHeight: '300px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>
+                  {selectedMetric === 'Feedbacks' ? 'reviews' : selectedMetric === 'Test Scores' ? 'military_tech' : selectedMetric === 'Attendance' ? 'event_available' : 'checklist'}
+                </span>
+                <h3 style={{ margin: 0, fontSize: 20 }}>{selectedMetric} Summary</h3>
+              </div>
+              <div style={{ marginBottom: 24, minHeight: 120 }}>
+                {selectedMetric === 'Feedbacks' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {(!profile?.managerFeedbacks || profile.managerFeedbacks.length === 0) ? (
+                      <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No feedback received yet.</p>
+                    ) : (
+                      <div style={{ background: '#f8fafc', padding: 16, borderRadius: 8, borderLeft: '4px solid #1976d2' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ color: '#1e293b' }}>Latest Feedback: {profile.managerFeedbacks[profile.managerFeedbacks.length - 1].impression}</strong>
+                          <span style={{ color: '#f59e0b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {profile.managerFeedbacks[profile.managerFeedbacks.length - 1].rating} 
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 13, color: '#475569', fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          "{profile.managerFeedbacks[profile.managerFeedbacks.length - 1].review}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedMetric === 'Tasks Completed' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+                    {(!profile?.currentWeeklyTargets || profile.currentWeeklyTargets.length === 0) ? (
+                      <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No tasks assigned this week.</p>
+                    ) : (
+                      profile.currentWeeklyTargets.map((t, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                          <span className="material-symbols-outlined" style={{ color: t.completed ? '#22c55e' : '#94a3b8', fontSize: 18 }}>
+                            {t.completed ? 'check_circle' : 'radio_button_unchecked'}
+                          </span>
+                          <span style={{ fontSize: 14, color: t.completed ? '#64748b' : '#334155', textDecoration: t.completed ? 'line-through' : 'none', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {t.text}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {selectedMetric === 'Attendance' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+                    {[1, 2, 3, 4, 5].map((day, idx) => {
+                      const d = new Date(); d.setDate(d.getDate() - day);
+                      return (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                          <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#334155' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span className="material-symbols-outlined" style={{ fontSize: 16, color: '#22c55e' }}>login</span> 08:50 AM</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ef4444' }}>logout</span> 03:15 PM</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedMetric === 'Test Scores' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+                    {[
+                      { topic: "Recent Chapter Test", batch: profile?.assignedBatches?.[0] || "Default Batch", avg: 78, trend: 'up' },
+                      { topic: "Monthly Assessment", batch: profile?.assignedBatches?.[0] || "Default Batch", avg: 85, trend: 'up' }
+                    ].map((test, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff1f2', padding: '10px 12px', borderRadius: 8, border: '1px solid #ffe4e6' }}>
+                        <div>
+                          <div style={{ fontSize: 13, color: '#be123c', fontWeight: 600 }}>{test.topic}</div>
+                          <div style={{ fontSize: 11, color: '#f43f5e' }}>Batch: {test.batch}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 18, color: '#be123c', fontWeight: 'bold' }}>{test.avg}%</span>
+                          <span className="material-symbols-outlined" style={{ color: test.trend === 'up' ? '#22c55e' : '#ef4444', fontSize: 18 }}>
+                            {test.trend === 'up' ? 'trending_up' : 'trending_down'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ background: '#f5f5f5', padding: '10px 20px', borderRadius: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>Current Score</span>
+                  <strong style={{ fontSize: 20, color: 'var(--text-primary)' }}>
+                    {selectedMetric === 'Feedbacks' ? perfData.breakdown.feedback : selectedMetric === 'Test Scores' ? perfData.breakdown.tests : selectedMetric === 'Attendance' ? perfData.breakdown.attendance : perfData.breakdown.tasks}
+                    <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+                      /{selectedMetric === 'Feedbacks' ? '40' : selectedMetric === 'Test Scores' ? '30' : selectedMetric === 'Tasks Completed' ? '20' : '10'}
+                    </span>
+                  </strong>
+                </div>
+                <button 
+                  className="btn btn-ghost" 
+                  onClick={() => {
+                    if (selectedMetric === 'Feedbacks') handleTabChange('feedbacks');
+                    else if (selectedMetric === 'Attendance') handleTabChange('attendance');
+                    else if (selectedMetric === 'Tasks Completed') handleTabChange('dashboard_hub');
+                    // Add other redirects as needed
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--brand-primary)', fontWeight: 600, padding: '10px 20px' }}
+                >
+                  Know More
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="portal-card" style={{ marginBottom: 24 }}>
-             <h3 style={{ margin: '0 0 20px 0' }}>Metric Breakdown (20 Points Each)</h3>
+             <h3 style={{ margin: '0 0 20px 0' }}>Metric Breakdown</h3>
              <div className="grid-auto-200">
                 {[
-                  { label: 'Attendance', val: perfData.breakdown.attendance, icon: 'event_available', color: '#1976d2', bg: '#e3f2fd' },
-                  { label: 'Feedbacks', val: perfData.breakdown.feedback, icon: 'reviews', color: '#e65100', bg: '#fff3e0' },
-                  { label: 'Tasks Completed', val: perfData.breakdown.tasks, icon: 'checklist', color: '#2e7d32', bg: '#e8f5e9' },
-                  { label: 'Syllabus Progress', val: perfData.breakdown.syllabus, icon: 'trending_up', color: '#6a1b9a', bg: '#f3e5f5' },
-                  { label: 'Test Scores', val: perfData.breakdown.tests, icon: 'military_tech', color: '#c2185b', bg: '#fce4ec' }
+                  { label: 'Feedbacks', val: perfData.breakdown.feedback, max: 40, icon: 'reviews', color: '#e65100', bg: '#fff3e0' },
+                  { label: 'Test Scores', val: perfData.breakdown.tests, max: 30, icon: 'military_tech', color: '#c2185b', bg: '#fce4ec' },
+                  { label: 'Tasks Completed', val: perfData.breakdown.tasks, max: 20, icon: 'checklist', color: '#2e7d32', bg: '#e8f5e9' },
+                  { label: 'Attendance', val: perfData.breakdown.attendance, max: 10, icon: 'event_available', color: '#1976d2', bg: '#e3f2fd' }
                 ].map(m => (
-                  <div key={m.label} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 12, border: '1px solid var(--surface-border)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div 
+                    key={m.label} 
+                    onClick={() => setSelectedMetric(m.label)}
+                    style={{ 
+                      background: selectedMetric === m.label ? m.bg : 'var(--surface-bg)', 
+                      padding: 16, 
+                      borderRadius: 12, 
+                      border: selectedMetric === m.label ? `2px solid ${m.color}` : '1px solid var(--surface-border)', 
+                      textAlign: 'center', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: selectedMetric === m.label ? `0 4px 12px ${m.bg}` : 'none'
+                    }}
+                  >
                     <div style={{ width: 48, height: 48, borderRadius: '50%', background: m.bg, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                        <span className="material-symbols-outlined">{m.icon}</span>
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{m.label}</span>
-                    <span style={{ fontSize: 24, fontWeight: 800, color: m.color, marginTop: 4 }}>{m.val}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 'normal' }}>/20</span></span>
+                    <span style={{ fontSize: 24, fontWeight: 800, color: m.color, marginTop: 4 }}>{m.val}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 'normal' }}>/{m.max}</span></span>
                   </div>
                 ))}
              </div>
@@ -2090,19 +2341,37 @@ export default function TeacherDashboard({ profile }) {
                     </div>
                   </div>
                   
-                  <div style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 8, marginBottom: 16, border: '1px solid var(--surface-border)' }}>
-                    <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: 'var(--text-primary)' }}>Detailed Review</h4>
-                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fb.review}</p>
-                  </div>
-                  
-                  {fb.focusArea && (
-                    <div style={{ background: 'rgba(253,180,42,0.05)', padding: 16, borderRadius: 8, border: '1px dashed var(--brand-primary)' }}>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>target</span> Next Week Focus
+                  {/* Grid Layout for the feedback content */}
+                  <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', marginBottom: 16 }}>
+                    
+                    {/* Detailed Review - Full Width (Yellow Theme) */}
+                    <div style={{ background: 'linear-gradient(145deg, #fffbeb, #fef3c7)', padding: 20, borderRadius: 12, border: '1px solid #fde68a', gridColumn: '1 / -1', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.05)' }}>
+                      <h4 style={{ margin: '0 0 12px 0', fontSize: 15, color: '#b45309', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>rate_review</span> Detailed Professional Review
                       </h4>
-                      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fb.focusArea}</p>
+                      <p style={{ margin: 0, fontSize: 14, color: '#92400e', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{fb.review}</p>
                     </div>
-                  )}
+                    
+                    {/* Impressive Areas (Green Theme) */}
+                    {fb.impressiveAreas && (
+                      <div style={{ background: 'linear-gradient(145deg, #f0fdf4, #dcfce7)', padding: 20, borderRadius: 12, border: '1px solid #bbf7d0', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.05)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', fontSize: 15, color: '#15803d', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>workspace_premium</span> Impressive Areas
+                        </h4>
+                        <p style={{ margin: 0, fontSize: 14, color: '#166534', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{fb.impressiveAreas}</p>
+                      </div>
+                    )}
+                    
+                    {/* Focus Area (Red Theme) */}
+                    {fb.focusArea && (
+                      <div style={{ background: 'linear-gradient(145deg, #fef2f2, #fee2e2)', padding: 20, borderRadius: 12, border: '1px solid #fecaca', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.05)' }}>
+                        <h4 style={{ margin: '0 0 12px 0', fontSize: 15, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>track_changes</span> Areas of Focus (Next Week)
+                        </h4>
+                        <p style={{ margin: 0, fontSize: 14, color: '#991b1b', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{fb.focusArea}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2823,12 +3092,44 @@ export default function TeacherDashboard({ profile }) {
                 <span className="material-symbols-outlined" style={{ color: '#1976d2' }}>grading</span>
                 Test Records
               </h2>
-              <button 
-                className="btn btn-brand btn-sm" 
-                onClick={() => setClassTestModal({ isOpen: true, step: 1, form: { date: '', time: '', subject: SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] })}
-              >
-                + Add Class Test
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <select 
+                  className="portal-input" 
+                  value={testFilter.batch} 
+                  onChange={e => setTestFilter({...testFilter, batch: e.target.value})} 
+                  style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '120px' }}
+                >
+                  <option value="All">All Batches</option>
+                  {(profile?.assignedBatches || []).map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+
+                <select 
+                  className="portal-input" 
+                  value={testFilter.type} 
+                  onChange={e => setTestFilter({...testFilter, type: e.target.value})} 
+                  style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '130px' }}
+                >
+                  <option value="All">All Test Types</option>
+                  <option value="class_test">Class Tests</option>
+                  <option value="weekly_test">Weekly Tests</option>
+                </select>
+
+                <button 
+                  className="btn btn-brand btn-sm" 
+                  style={{ whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    const now = new Date();
+                    const currentDate = now.toISOString().split('T')[0];
+                    // Ensure local timezone time string
+                    const hours = now.getHours().toString().padStart(2, '0');
+                    const mins = now.getMinutes().toString().padStart(2, '0');
+                    const currentTime = `${hours}:${mins}`;
+                    setClassTestModal({ isOpen: true, step: 1, form: { date: currentDate, time: currentTime, subject: SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
+                  }}
+                >
+                  + Add Class Test
+                </button>
+              </div>
             </div>
             <div className="table-responsive">
               <table className="portal-table">
@@ -2843,90 +3144,55 @@ export default function TeacherDashboard({ profile }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {testRecords.length === 0 ? (
-                    <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No test records found.</td></tr>
-                  ) : testRecords.map(tr => {
-                    const workflow = testWorkflows[tr.testId];
-                    return (
-                      <tr key={tr.id}>
-                        <td>{tr.testDate || '-'}</td>
-                        <td><span className="badge badge-branch-manager">{tr.batch}</span></td>
-                        <td><strong>{tr.subject}</strong> <br/> <span style={{fontSize: 12, color: '#666'}}>{tr.topic}</span></td>
-                        <td>{tr.maxMarks}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            {tr.isClassTest ? (
-                              <span className="badge" style={{ background: 'var(--brand-primary)', color: '#fff', padding: '4px 8px', fontSize: 11 }}>CLASS TEST</span>
-                            ) : (
-                              <>
-                                {workflow?.finalLink ? (
-                                   <a href={workflow.finalLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e8f5e9', color: '#2e7d32', padding: '4px 8px', fontSize: 11 }}>Paper</a>
-                                ) : <span style={{ color: '#ccc' }}>-</span>}
-                                {workflow?.solutionsLink && (
-                                   <a href={workflow.solutionsLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e3f2fd', color: '#1565c0', padding: '4px 8px', fontSize: 11 }}>Answers</a>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <button className="btn-primary btn-sm" onClick={async () => {
-                            const { getDocs, query, collection, where } = await import('firebase/firestore');
-                            const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', tr.batch)));
-                            const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                            setViewTestRecordStudents(batchStudents);
-                            setViewTestRecord(tr);
-                          }}>View Marks</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  {(() => {
+                    const filteredTestRecords = testRecords.filter(tr => {
+                      if (testFilter.batch !== 'All' && tr.batch !== testFilter.batch) return false;
+                      if (testFilter.type === 'class_test' && !tr.isClassTest) return false;
+                      if (testFilter.type === 'weekly_test' && tr.isClassTest) return false;
+                      return true;
+                    });
 
-          <div className="portal-card">
-            <h2 style={{ marginBottom: 16 }}>Assignment Submissions</h2>
-            <div className="table-responsive">
-              <table className="portal-table">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Batch</th>
-                    <th>Assignment</th>
-                    <th>Submission Link</th>
-                    <th>Marks/Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {submissions.length === 0 ? (
-                    <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No submissions found.</td></tr>
-                  ) : submissions.map(sub => (
-                    <tr key={sub.id}>
-                      <td>{sub.studentName}</td>
-                      <td><span className="badge badge-branch-manager">{sub.batch}</span></td>
-                      <td>{sub.assignmentTitle}</td>
-                      <td>
-                        <a href={sub.driveLink} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-primary)', textDecoration: 'underline' }}>View Work</a>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input 
-                            className="portal-input" 
-                            type="number" 
-                            placeholder="e.g. 85" 
-                            defaultValue={sub.marks || ''}
-                            onBlur={(e) => {
-                              if(e.target.value) handleGradeSubmission(sub.id, e.target.value);
-                            }}
-                            style={{ width: 80, padding: 6, fontSize: 14 }}
-                          />
-                          {sub.graded && <span className="material-symbols-outlined" style={{ color: 'var(--status-success)', fontSize: 18 }}>check_circle</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                    if (filteredTestRecords.length === 0) {
+                      return <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No test records found.</td></tr>;
+                    }
+                    
+                    return filteredTestRecords.map(tr => {
+                      const workflow = testWorkflows[tr.testId];
+                      return (
+                        <tr key={tr.id}>
+                          <td>{tr.testDate || '-'}</td>
+                          <td><span className="badge badge-branch-manager">{tr.batch}</span></td>
+                          <td><strong>{tr.subject}</strong> <br/> <span style={{fontSize: 12, color: '#666'}}>{tr.topic}</span></td>
+                          <td>{tr.maxMarks}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {tr.isClassTest ? (
+                                <span className="badge" style={{ background: 'var(--brand-primary)', color: '#fff', padding: '4px 8px', fontSize: 11 }}>CLASS TEST</span>
+                              ) : (
+                                <>
+                                  {workflow?.finalLink ? (
+                                     <a href={workflow.finalLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e8f5e9', color: '#2e7d32', padding: '4px 8px', fontSize: 11 }}>Paper</a>
+                                  ) : <span style={{ color: '#ccc' }}>-</span>}
+                                  {workflow?.solutionsLink && (
+                                     <a href={workflow.solutionsLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e3f2fd', color: '#1565c0', padding: '4px 8px', fontSize: 11 }}>Answers</a>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <button className="btn-primary btn-sm" onClick={async () => {
+                              const { getDocs, query, collection, where } = await import('firebase/firestore');
+                              const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', tr.batch)));
+                              const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                              setViewTestRecordStudents(batchStudents);
+                              setViewTestRecord(tr);
+                            }}>View Marks</button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
