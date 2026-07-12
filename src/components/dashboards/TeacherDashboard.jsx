@@ -360,6 +360,8 @@ export default function TeacherDashboard({ profile }) {
 
   const [isStatsFlipped, setIsStatsFlipped] = useState(false);
   const [isHolidayStatsFlipped, setIsHolidayStatsFlipped] = useState(false);
+  const [isYearlyAttendanceFlipped, setIsYearlyAttendanceFlipped] = useState(false);
+  const [holidayDetailsType, setHolidayDetailsType] = useState(null);
 
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -426,6 +428,17 @@ export default function TeacherDashboard({ profile }) {
     const days = parseInt(leaveFormData.days, 10);
     if (isNaN(days) || days <= 0) {
       alert("Please enter a valid number of days.");
+      return;
+    }
+
+    const selectedTypeStats = yearlyHolidayStats[leaveFormData.type];
+    if (selectedTypeStats && (selectedTypeStats.used + days > selectedTypeStats.quota)) {
+      alert(`You only have ${selectedTypeStats.quota - selectedTypeStats.used} days left for ${selectedTypeStats.label}.`);
+      return;
+    }
+    
+    if (totalHolidaysUsed + days > totalHolidaysQuota) {
+      alert(`You only have ${totalHolidaysQuota - totalHolidaysUsed} days left in your total yearly quota of ${totalHolidaysQuota} days.`);
       return;
     }
 
@@ -496,6 +509,13 @@ export default function TeacherDashboard({ profile }) {
   };
 
   const monthlyStats = generateMockStats(currentYear, currentMonth);
+  const yearlyAttendanceStats = Array.from({ length: 12 }).reduce((acc, _, idx) => {
+    const s = generateMockStats(currentYear, idx);
+    acc.workingDays += s.workingDays;
+    acc.presentDays += s.presentDays;
+    acc.absentDays += s.absentDays;
+    return acc;
+  }, { workingDays: 0, presentDays: 0, absentDays: 0 });
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   // ----------------------------------------
   const [ptmStudent, setPtmStudent] = useState(null);
@@ -1717,7 +1737,7 @@ export default function TeacherDashboard({ profile }) {
                     
                     <div className="grid-2" style={{ gap: 12, flex: 1 }}>
                       {Object.entries(yearlyHolidayStats).map(([key, stat]) => (
-                        <div key={key} style={{ background: 'white', padding: '16px 12px', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #f1f5f9' }}>
+                        <div key={key} onClick={(e) => { e.stopPropagation(); setHolidayDetailsType(key); }} style={{ background: 'white', padding: '16px 12px', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'transform 0.2s' }} className="hover-lift">
                           <p style={{ margin: 0, fontSize: 14, color: stat.color, fontWeight: 'bold' }}>{stat.label}</p>
                           <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
                             <span style={{ fontSize: 28, fontWeight: '900', color: '#1e293b', lineHeight: 1 }}>{stat.used}</span>
@@ -1806,38 +1826,141 @@ export default function TeacherDashboard({ profile }) {
               </div>
 
               {/* Right Column: Monthly Breakdown */}
-              <div className="portal-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 16, color: 'var(--text-primary)' }}>Monthly Tracker</h3>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {monthlyHolidayBreakdown.length === 0 ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                      No holidays taken yet.
+              {/* Right Column: Yearly Attendance Record */}
+              <div 
+                className="portal-card hover-lift" 
+                style={{ 
+                  border: 'none', 
+                  perspective: '1000px',
+                  padding: 0,
+                  cursor: 'pointer',
+                  minHeight: 380
+                }}
+                onClick={() => setIsYearlyAttendanceFlipped(!isYearlyAttendanceFlipped)}
+              >
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                minHeight: 380
+              }}>
+                {/* FRONT: Grid */}
+                <div style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    backfaceVisibility: 'hidden',
+                    transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                    transform: isYearlyAttendanceFlipped ? 'rotateY(-180deg)' : 'rotateY(0deg)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: 20,
+                    boxSizing: 'border-box',
+                    background: 'white',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 16
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h3 style={{ color: '#1e293b', margin: '0 0 6px 0', fontSize: 16 }}>Yearly Overall Attendance</h3>
+                      <span className="badge" style={{ background: '#f8fafc', color: '#64748b', border: '1px solid #cbd5e1' }}>{currentYear}</span>
                     </div>
-                  ) : (
-                    monthlyHolidayBreakdown.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(106, 27, 154, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span className="material-symbols-outlined" style={{ color: '#6a1b9a' }}>calendar_month</span>
+                    
+                    <div className="grid-2" style={{ gap: 12, flex: 1 }}>
+                      <div style={{ background: '#f0fdf4', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #bbf7d0' }}>
+                        <p style={{ margin: 0, fontSize: 14, color: '#16a34a', fontWeight: 'bold' }}>Present</p>
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 28, fontWeight: '900', color: '#15803d', lineHeight: 1 }}>{yearlyAttendanceStats.presentDays}</span>
+                          <span style={{ fontSize: 14, color: '#16a34a', marginBottom: 4 }}>Days</span>
                         </div>
-                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{item.month}</span>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: 20, fontWeight: '900', color: item.used > 0 ? '#d32f2f' : '#2e7d32' }}>{item.used}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 4 }}>Days Took</span>
+                      <div style={{ background: '#fef2f2', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #fecaca' }}>
+                        <p style={{ margin: 0, fontSize: 14, color: '#dc2626', fontWeight: 'bold' }}>Absent</p>
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 28, fontWeight: '900', color: '#b91c1c', lineHeight: 1 }}>{yearlyAttendanceStats.absentDays}</span>
+                          <span style={{ fontSize: 14, color: '#dc2626', marginBottom: 4 }}>Days</span>
+                        </div>
+                      </div>
+                      <div style={{ background: '#fffbeb', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #fde68a', gridColumn: 'span 2' }}>
+                        <p style={{ margin: 0, fontSize: 14, color: '#d97706', fontWeight: 'bold' }}>Holidays Taken</p>
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 28, fontWeight: '900', color: '#b45309', lineHeight: 1 }}>{totalHolidaysUsed}</span>
+                          <span style={{ fontSize: 14, color: '#d97706', marginBottom: 4 }}>Days</span>
+                        </div>
+                        <div style={{ width: '100%', height: 6, background: '#fef3c7', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+                          <div style={{ width: `${(totalHolidaysUsed / totalHolidaysQuota) * 100}%`, height: '100%', background: '#d97706', borderRadius: 3 }}></div>
+                        </div>
                       </div>
                     </div>
-                  )))}
-                  
-                  <div style={{ marginTop: 'auto', padding: 16, background: '#f5f5f5', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span className="material-symbols-outlined" style={{ color: '#616161' }}>lightbulb</span>
-                    <p style={{ margin: 0, fontSize: 13, color: '#616161' }}>
-                      Tip: Plan your Summer Vacations properly to avoid overlap with Board Exams.
-                    </p>
+                  </div>
+
+                  {/* BACK: Pie Chart */}
+                  <div style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    backfaceVisibility: 'hidden',
+                    transition: 'transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1)',
+                    transform: isYearlyAttendanceFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: 20,
+                    boxSizing: 'border-box',
+                    background: 'white',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 16
+                  }}>
+                    <h3 style={{ color: '#1e293b', margin: '0 0 16px 0', fontSize: 16, textAlign: 'center' }}>Yearly Attendance Distribution</h3>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Present', value: yearlyAttendanceStats.presentDays, color: '#10b981' },
+                              { name: 'Absent', value: yearlyAttendanceStats.absentDays, color: '#ef4444' },
+                              { name: 'Holidays', value: totalHolidaysUsed, color: '#f59e0b' }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={4}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                          <Label 
+                            value="Total Days" 
+                            position="centerBottom" 
+                            dy={-10}
+                            fill="#1e293b" 
+                            style={{ fontSize: '14px', fontWeight: '900' }} 
+                          />
+                          <Label 
+                            value={yearlyAttendanceStats.workingDays} 
+                            position="centerTop" 
+                            dy={10}
+                            fill="#64748b" 
+                            style={{ fontSize: '12px', fontWeight: 'bold' }} 
+                          />
+                          {[
+                            { color: '#10b981' },
+                            { color: '#ef4444' },
+                            { color: '#f59e0b' }
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }} 
+                            itemStyle={{ fontWeight: 'bold' }}
+                            cursor={false}
+                          />
+                          <Legend verticalAlign="bottom" height={24} iconType="circle" wrapperStyle={{ fontSize: '13px', fontWeight: 'bold' }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
@@ -3248,10 +3371,14 @@ export default function TeacherDashboard({ profile }) {
             <div className="form-group" style={{ marginBottom: 16 }}>
               <label className="form-label">Leave Category</label>
               <select className="portal-input" value={leaveFormData.type} onChange={e => setLeaveFormData({...leaveFormData, type: e.target.value})}>
-                <option value="summer">Summer Vacation (15 days quota)</option>
-                <option value="sick">Sick Leave (5 days quota)</option>
-                <option value="festival">Festival (5 days quota)</option>
-                <option value="travel">Travel + Village (5 days quota)</option>
+                {Object.entries(yearlyHolidayStats).map(([key, stat]) => {
+                  const left = stat.quota - stat.used;
+                  return (
+                    <option key={key} value={key} disabled={left <= 0 || totalHolidaysLeft <= 0}>
+                      {stat.label} ({left > 0 ? `${left} days left` : 'Quota Reached'})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -3266,6 +3393,62 @@ export default function TeacherDashboard({ profile }) {
                 {leaveSaving ? 'Submitting...' : 'Submit Request'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday Details Modal */}
+      {holidayDetailsType && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: 22 }}>
+                  {yearlyHolidayStats[holidayDetailsType]?.label} Details
+                </h2>
+                <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                  Total Used: {yearlyHolidayStats[holidayDetailsType]?.used} / {yearlyHolidayStats[holidayDetailsType]?.quota} days
+                </p>
+              </div>
+              <button className="btn-ghost" onClick={() => setHolidayDetailsType(null)}>Close</button>
+            </div>
+            
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                  <th style={{ padding: 12, textAlign: 'left' }}>Date Range</th>
+                  <th style={{ padding: 12, textAlign: 'center' }}>Days</th>
+                  <th style={{ padding: 12, textAlign: 'left' }}>Reason</th>
+                  <th style={{ padding: 12, textAlign: 'center' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveRequests.filter(r => r.type === holidayDetailsType).length === 0 ? (
+                  <tr>
+                    <td colSpan="4" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No holidays of this type recorded.</td>
+                  </tr>
+                ) : (
+                  leaveRequests.filter(r => r.type === holidayDetailsType).map(req => (
+                    <tr key={req.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: 12, textAlign: 'left' }}>
+                        {req.startDate ? new Date(req.startDate).toLocaleDateString('en-GB') : '-'} to {req.endDate ? new Date(req.endDate).toLocaleDateString('en-GB') : '-'}
+                      </td>
+                      <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>{req.totalDays}</td>
+                      <td style={{ padding: 12, textAlign: 'left', fontStyle: 'italic', color: 'var(--text-secondary)' }}>{req.reason || 'No reason provided'}</td>
+                      <td style={{ padding: 12, textAlign: 'center' }}>
+                        <span style={{ 
+                          padding: '4px 8px', borderRadius: 12, fontSize: 12, fontWeight: 'bold',
+                          background: req.status === 'approved' ? '#dcfce7' : req.status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                          color: req.status === 'approved' ? '#166534' : req.status === 'rejected' ? '#991b1b' : '#854d0e'
+                        }}>
+                          {req.status ? req.status.charAt(0).toUpperCase() + req.status.slice(1) : 'Pending'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
