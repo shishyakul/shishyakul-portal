@@ -588,6 +588,10 @@ function DeleteUserModal({ user, onClose, onSaved }) {
 
 function FeedbackModal({ teacher, onClose, onSaved }) {
   const [rating, setRating] = useState(0);
+  const [disciplineRating, setDisciplineRating] = useState(0);
+  const [teachingQualityRating, setTeachingQualityRating] = useState(0);
+  const [communicationRating, setCommunicationRating] = useState(0);
+  const [professionalismRating, setProfessionalismRating] = useState(0);
   const [impression, setImpression] = useState('');
   const [review, setReview] = useState('');
   const [impressiveAreas, setImpressiveAreas] = useState('');
@@ -616,6 +620,10 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
       const fbData = {
         date: new Date().toISOString(),
         rating,
+        disciplineRating,
+        teachingQualityRating,
+        communicationRating,
+        professionalismRating,
         impression,
         review: review.trim(),
         impressiveAreas: impressiveAreas.trim(),
@@ -662,7 +670,7 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
         )}
 
         <div className="form-group">
-          <label className="form-label">Performance Rating (1-5 Stars)</label>
+          <label className="form-label">Overall Performance Rating (1-5 Stars)</label>
           <div style={{ display: 'flex', gap: 8 }}>
             {[1,2,3,4,5].map(star => (
               <span 
@@ -674,6 +682,41 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
                 star
               </span>
             ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div>
+            <label className="form-label" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Discipline</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => setDisciplineRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= disciplineRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="form-label" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Teaching Quality</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => setTeachingQualityRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= teachingQualityRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="form-label" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Communication</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => setCommunicationRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= communicationRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="form-label" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Professionalism</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => setProfessionalismRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= professionalismRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
+              ))}
+            </div>
           </div>
         </div>
 

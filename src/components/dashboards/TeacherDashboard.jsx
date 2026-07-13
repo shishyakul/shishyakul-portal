@@ -487,37 +487,68 @@ export default function TeacherDashboard({ profile }) {
     setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  // Mock Stats Generator based on month
+  // Real Stats Generator based on actual Firebase teacherAttendanceRecords
   const currentYear = calendarDate.getFullYear();
   const currentMonth = calendarDate.getMonth();
   
-  const generateMockStats = (year, month) => {
-    const totalDays = getDaysInMonth(year, month);
-    // Simple deterministic logic based on month index to simulate dynamic data
-    const workingDays = Math.floor(totalDays * 0.75); 
-    const presentDays = workingDays - (month % 3); 
-    const lateMarks = month % 4;
-    const holidaysTook = (month % 2) + 1;
-    const absentDays = workingDays - presentDays;
-    const sundays = 4; // Mock sundays count
-    return {
-      workingDays,
-      absentDays,
-      presentDays,
-      lateMarks,
-      holidaysTook,
-      sundays
+  const calculateRealStats = (year, month = null) => {
+    let presentDays = 0, absentDays = 0, lateMarks = 0, sundays = 0, holidaysTook = 0;
+    
+    const getDaysInYear = (y) => ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
+    const getDaysInMonthLocal = (y, m) => new Date(y, m + 1, 0).getDate();
+    let totalDays = month !== null ? getDaysInMonthLocal(year, month) : getDaysInYear(year);
+
+    const getSundays = (y, m) => {
+      let count = 0;
+      for (let i = 1; i <= new Date(y, m + 1, 0).getDate(); i++) {
+        if (new Date(y, m, i).getDay() === 0) count++;
+      }
+      return count;
     };
+
+    if (month !== null) {
+      sundays = getSundays(year, month);
+      // Holidays took in a specific month
+      if (profile?.leaveRequests) {
+        profile.leaveRequests.forEach(lr => {
+           if (lr.status === 'Approved') {
+             const d = new Date(lr.startDate || lr.date);
+             if (d.getFullYear() === year && d.getMonth() === month) holidaysTook += (Number(lr.days) || 1);
+           }
+        });
+      }
+    } else {
+      for(let m = 0; m < 12; m++) sundays += getSundays(year, m);
+      // For yearly holidays, we can use the totalHolidaysUsed calculated elsewhere, but to keep the function pure:
+      if (profile?.leaveRequests) {
+        profile.leaveRequests.forEach(lr => {
+           if (lr.status === 'Approved') {
+             const d = new Date(lr.startDate || lr.date);
+             if (d.getFullYear() === year) holidaysTook += (Number(lr.days) || 1);
+           }
+        });
+      }
+    }
+
+    const filteredRecords = teacherAttendanceRecords.filter(r => {
+      const d = new Date(r.date);
+      if (d.getFullYear() !== year) return false;
+      if (month !== null && d.getMonth() !== month) return false;
+      return true;
+    });
+
+    filteredRecords.forEach(r => {
+      if (r.status === 'Present') presentDays++;
+      else if (r.status === 'Late') { presentDays++; lateMarks++; }
+      else absentDays++;
+    });
+
+    const workingDays = totalDays - sundays - holidaysTook;
+    return { workingDays, presentDays, absentDays, lateMarks, sundays, holidaysTook, totalDays };
   };
 
-  const monthlyStats = generateMockStats(currentYear, currentMonth);
-  const yearlyAttendanceStats = Array.from({ length: 12 }).reduce((acc, _, idx) => {
-    const s = generateMockStats(currentYear, idx);
-    acc.workingDays += s.workingDays;
-    acc.presentDays += s.presentDays;
-    acc.absentDays += s.absentDays;
-    return acc;
-  }, { workingDays: 0, presentDays: 0, absentDays: 0 });
+  const monthlyStats = calculateRealStats(currentYear, currentMonth);
+  const yearlyAttendanceStats = calculateRealStats(currentYear);
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   // ----------------------------------------
   const [ptmStudent, setPtmStudent] = useState(null);
@@ -1325,36 +1356,6 @@ export default function TeacherDashboard({ profile }) {
                 </div>
               </div>
 
-              {/* My Yearly Targets */}
-              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>sports_score</span>
-                  My Yearly Targets
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {!profile?.yearlyTarget ? (
-                    <span style={{ fontSize: 13, color: '#94a3b8' }}>No targets assigned yet.</span>
-                  ) : (
-                    profile.yearlyTarget.split(' | ').filter(Boolean).map((target, idx) => (
-                      <div key={idx} style={{ 
-                        padding: '12px 16px', 
-                        background: '#f8fafc', 
-                        borderRadius: 10, 
-                        fontSize: 14, 
-                        color: '#334155', 
-                        border: '1px solid #f1f5f9', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 12 
-                      }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--brand-primary)' }}>adjust</span>
-                        <span style={{ fontWeight: '500' }}>{target}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
               {/* My Weekly Targets */}
               <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
                 <h3 style={{ margin: '0 0 8px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1413,6 +1414,36 @@ export default function TeacherDashboard({ profile }) {
                     No weekly targets assigned yet.
                   </div>
                 )}
+              </div>
+
+              {/* My Yearly Targets */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>sports_score</span>
+                  My Yearly Targets
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {!profile?.yearlyTarget ? (
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>No targets assigned yet.</span>
+                  ) : (
+                    profile.yearlyTarget.split(' | ').filter(Boolean).map((target, idx) => (
+                      <div key={idx} style={{ 
+                        padding: '12px 16px', 
+                        background: '#f8fafc', 
+                        borderRadius: 10, 
+                        fontSize: 14, 
+                        color: '#334155', 
+                        border: '1px solid #f1f5f9', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 12 
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--brand-primary)' }}>adjust</span>
+                        <span style={{ fontWeight: '500' }}>{target}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               {/* Batch Wise Report & Record Keeping */}
@@ -1552,29 +1583,32 @@ export default function TeacherDashboard({ profile }) {
                 }}>
                    <h3 style={{ color: '#0369a1', margin: '0 0 12px 0', fontSize: 16 }}>Monthly Statistics (Click to Flip)</h3>
                    <div className="grid-2" style={{ gap: 12, flex: 1 }}>
+                     {/* Row 1 */}
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#64748b', fontWeight: 'bold' }}>Sunday</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#475569' }}>{monthlyStats.sundays}</p>
+                     </div>
+                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
+                       <p style={{ margin: 0, fontSize: 13, color: '#9333ea', fontWeight: 'bold' }}>Inst. Holiday</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#7e22ce' }}>{monthlyStats.holidaysTook}</p>
+                     </div>
+                     {/* Row 2 */}
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
                        <p style={{ margin: 0, fontSize: 13, color: '#0284c7', fontWeight: 'bold' }}>Working Days</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#0369a1' }}>{monthlyStats.workingDays}</p>
                      </div>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#e11d48', fontWeight: 'bold' }}>Absent</p>
-                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#be123c' }}>{monthlyStats.absentDays}</p>
-                     </div>
-                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#16a34a', fontWeight: 'bold' }}>Present</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#16a34a', fontWeight: 'bold' }}>Present Days</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#15803d' }}>{monthlyStats.presentDays}</p>
                      </div>
+                     {/* Row 3 */}
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
                        <p style={{ margin: 0, fontSize: 13, color: '#ea580c', fontWeight: 'bold' }}>Late</p>
                        <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#c2410c' }}>{monthlyStats.lateMarks}</p>
                      </div>
                      <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#9333ea', fontWeight: 'bold' }}>Holiday Took</p>
-                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#7e22ce' }}>{monthlyStats.holidaysTook}</p>
-                     </div>
-                     <div style={{ background: 'white', padding: '12px 8px', borderRadius: 12, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #e0f2fe' }}>
-                       <p style={{ margin: 0, fontSize: 13, color: '#64748b', fontWeight: 'bold' }}>Sunday</p>
-                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#475569' }}>{monthlyStats.sundays}</p>
+                       <p style={{ margin: 0, fontSize: 13, color: '#e11d48', fontWeight: 'bold' }}>Absent</p>
+                       <p style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: '900', color: '#be123c' }}>{monthlyStats.absentDays}</p>
                      </div>
                    </div>
                 </div>
@@ -1636,8 +1670,8 @@ export default function TeacherDashboard({ profile }) {
                                { name: 'Present', value: monthlyStats.presentDays, color: '#4caf50' },
                                { name: 'Absent', value: monthlyStats.absentDays, color: '#f44336' },
                                { name: 'Late', value: monthlyStats.lateMarks, color: '#ff9800' },
-                               { name: 'Holidays', value: monthlyStats.holidaysTook, color: '#9c27b0' },
-                               { name: 'Sundays', value: monthlyStats.sundays, color: '#607d8b' }
+                               { name: 'Inst. Holiday', value: monthlyStats.holidaysTook, color: '#9c27b0' },
+                               { name: 'Sunday', value: monthlyStats.sundays, color: '#607d8b' }
                              ].filter(d => d.value > 0).map((entry, index) => (
                                <Cell key={`cell-${index}`} fill={entry.color} />
                              ))
@@ -1984,6 +2018,13 @@ export default function TeacherDashboard({ profile }) {
                     </div>
                     
                     <div className="grid-2" style={{ gap: 12, flex: 1 }}>
+                      <div style={{ background: '#eff6ff', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #bfdbfe' }}>
+                        <p style={{ margin: 0, fontSize: 14, color: '#2563eb', fontWeight: 'bold' }}>Yearly Working Days</p>
+                        <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+                          <span style={{ fontSize: 28, fontWeight: '900', color: '#1d4ed8', lineHeight: 1 }}>{yearlyAttendanceStats.workingDays}</span>
+                          <span style={{ fontSize: 14, color: '#2563eb', marginBottom: 4 }}>Days</span>
+                        </div>
+                      </div>
                       <div style={{ background: '#f0fdf4', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #bbf7d0' }}>
                         <p style={{ margin: 0, fontSize: 14, color: '#16a34a', fontWeight: 'bold' }}>Present</p>
                         <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
@@ -1998,14 +2039,11 @@ export default function TeacherDashboard({ profile }) {
                           <span style={{ fontSize: 14, color: '#dc2626', marginBottom: 4 }}>Days</span>
                         </div>
                       </div>
-                      <div style={{ background: '#fffbeb', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #fde68a', gridColumn: 'span 2' }}>
+                      <div style={{ background: '#fffbeb', padding: '16px 12px', borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #fde68a' }}>
                         <p style={{ margin: 0, fontSize: 14, color: '#d97706', fontWeight: 'bold' }}>Holidays Taken</p>
                         <div style={{ marginTop: 12, display: 'flex', alignItems: 'flex-end', gap: 4 }}>
                           <span style={{ fontSize: 28, fontWeight: '900', color: '#b45309', lineHeight: 1 }}>{totalHolidaysUsed}</span>
                           <span style={{ fontSize: 14, color: '#d97706', marginBottom: 4 }}>Days</span>
-                        </div>
-                        <div style={{ width: '100%', height: 6, background: '#fef3c7', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
-                          <div style={{ width: `${(totalHolidaysUsed / totalHolidaysQuota) * 100}%`, height: '100%', background: '#d97706', borderRadius: 3 }}></div>
                         </div>
                       </div>
                     </div>
@@ -2035,12 +2073,14 @@ export default function TeacherDashboard({ profile }) {
                             data={[
                               { name: 'Present', value: yearlyAttendanceStats.presentDays, color: '#10b981' },
                               { name: 'Absent', value: yearlyAttendanceStats.absentDays, color: '#ef4444' },
-                              { name: 'Holidays', value: totalHolidaysUsed, color: '#f59e0b' }
-                            ]}
+                              { name: 'Holidays', value: totalHolidaysUsed, color: '#f59e0b' },
+                              { name: 'Sundays', value: yearlyAttendanceStats.sundays, color: '#64748b' },
+                              { name: 'Remaining Days', value: yearlyAttendanceStats.workingDays - (yearlyAttendanceStats.presentDays + yearlyAttendanceStats.absentDays), color: '#cbd5e1' }
+                            ].filter(d => d.value > 0)}
                             cx="50%"
                             cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
+                            innerRadius={45}
+                            outerRadius={75}
                             paddingAngle={4}
                             dataKey="value"
                             stroke="none"
@@ -2053,16 +2093,18 @@ export default function TeacherDashboard({ profile }) {
                             style={{ fontSize: '14px', fontWeight: '900' }} 
                           />
                           <Label 
-                            value={yearlyAttendanceStats.workingDays} 
+                            value={yearlyAttendanceStats.totalDays} 
                             position="centerTop" 
                             dy={10}
                             fill="#64748b" 
-                            style={{ fontSize: '12px', fontWeight: 'bold' }} 
+                            style={{ fontSize: '14px', fontWeight: 'bold' }} 
                           />
                           {[
                             { color: '#10b981' },
                             { color: '#ef4444' },
-                            { color: '#f59e0b' }
+                            { color: '#f59e0b' },
+                            { color: '#64748b' },
+                            { color: '#cbd5e1' }
                           ].map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
@@ -2143,14 +2185,28 @@ export default function TeacherDashboard({ profile }) {
             </div>
 
             {/* Right Block */}
-            <div className="portal-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '32px', minHeight: '300px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>
-                  {selectedMetric === 'Feedbacks' ? 'reviews' : selectedMetric === 'Test Scores' ? 'military_tech' : selectedMetric === 'Attendance' ? 'event_available' : 'checklist'}
-                </span>
-                <h3 style={{ margin: 0, fontSize: 20 }}>{selectedMetric} Summary</h3>
+            <div className="portal-card" style={{ display: 'flex', flexDirection: 'column', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>
+                    {selectedMetric === 'Feedbacks' ? 'reviews' : selectedMetric === 'Test Scores' ? 'military_tech' : selectedMetric === 'Attendance' ? 'event_available' : 'checklist'}
+                  </span>
+                  <h3 style={{ margin: 0, fontSize: 20 }}>{selectedMetric} Summary</h3>
+                </div>
+                {selectedMetric === 'Feedbacks' && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('feedback')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
+                )}
+                {selectedMetric === 'Tasks Completed' && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('home')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
+                )}
+                {selectedMetric === 'Test Scores' && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('grading')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
+                )}
+                {selectedMetric === 'Attendance' && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('attendance')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
+                )}
               </div>
-              <div style={{ marginBottom: 24, minHeight: 120 }}>
+              <div style={{ marginTop: 8 }}>
                 {selectedMetric === 'Feedbacks' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {(!profile?.managerFeedbacks || profile.managerFeedbacks.length === 0) ? (
@@ -2173,17 +2229,23 @@ export default function TeacherDashboard({ profile }) {
                 )}
 
                 {selectedMetric === 'Tasks Completed' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
-                    {(!profile?.currentWeeklyTargets || profile.currentWeeklyTargets.length === 0) ? (
-                      <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No tasks assigned this week.</p>
-                    ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                      <span className="material-symbols-outlined" style={{ color: '#22c55e', fontSize: 18 }}>check_circle</span>
+                      <span style={{ fontSize: 14, color: '#64748b', textDecoration: 'line-through', flex: 1 }}>Follow Weekly Schedule</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                      <span className="material-symbols-outlined" style={{ color: '#94a3b8', fontSize: 18 }}>radio_button_unchecked</span>
+                      <span style={{ fontSize: 14, color: '#334155', flex: 1 }}>Complete Upcoming Test Duties</span>
+                    </div>
+                    {(!profile?.currentWeeklyTargets || profile.currentWeeklyTargets.length === 0) ? null : (
                       profile.currentWeeklyTargets.map((t, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                           <span className="material-symbols-outlined" style={{ color: t.completed ? '#22c55e' : '#94a3b8', fontSize: 18 }}>
                             {t.completed ? 'check_circle' : 'radio_button_unchecked'}
                           </span>
                           <span style={{ fontSize: 14, color: t.completed ? '#64748b' : '#334155', textDecoration: t.completed ? 'line-through' : 'none', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {t.text}
+                            {t.title || t.text}
                           </span>
                         </div>
                       ))
@@ -2192,7 +2254,7 @@ export default function TeacherDashboard({ profile }) {
                 )}
 
                 {selectedMetric === 'Attendance' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {[1, 2, 3, 4, 5].map((day, idx) => {
                       const d = new Date(); d.setDate(d.getDate() - day);
                       return (
@@ -2209,7 +2271,7 @@ export default function TeacherDashboard({ profile }) {
                 )}
 
                 {selectedMetric === 'Test Scores' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {[
                       { topic: "Recent Chapter Test", batch: profile?.assignedBatches?.[0] || "Default Batch", avg: 78, trend: 'up' },
                       { topic: "Monthly Assessment", batch: profile?.assignedBatches?.[0] || "Default Batch", avg: 85, trend: 'up' }
@@ -2231,30 +2293,7 @@ export default function TeacherDashboard({ profile }) {
                 )}
               </div>
               
-              <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ background: '#f5f5f5', padding: '10px 20px', borderRadius: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 2 }}>Current Score</span>
-                  <strong style={{ fontSize: 20, color: 'var(--text-primary)' }}>
-                    {selectedMetric === 'Feedbacks' ? perfData.breakdown.feedback : selectedMetric === 'Test Scores' ? perfData.breakdown.tests : selectedMetric === 'Attendance' ? perfData.breakdown.attendance : perfData.breakdown.tasks}
-                    <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-                      /{selectedMetric === 'Feedbacks' ? '40' : selectedMetric === 'Test Scores' ? '30' : selectedMetric === 'Tasks Completed' ? '20' : '10'}
-                    </span>
-                  </strong>
-                </div>
-                <button 
-                  className="btn btn-ghost" 
-                  onClick={() => {
-                    if (selectedMetric === 'Feedbacks') handleTabChange('feedbacks');
-                    else if (selectedMetric === 'Attendance') handleTabChange('attendance');
-                    else if (selectedMetric === 'Tasks Completed') handleTabChange('dashboard_hub');
-                    // Add other redirects as needed
-                  }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--brand-primary)', fontWeight: 600, padding: '10px 20px' }}
-                >
-                  Know More
-                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
-                </button>
-              </div>
+
             </div>
           </div>
 
@@ -2343,6 +2382,44 @@ export default function TeacherDashboard({ profile }) {
                   
                   {/* Grid Layout for the feedback content */}
                   <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', marginBottom: 16 }}>
+
+                    {/* Detailed Metrics */}
+                    {(fb.disciplineRating || fb.teachingQualityRating || fb.communicationRating || fb.professionalismRating) && (
+                      <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0', gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
+                        {fb.disciplineRating && (
+                          <div>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Discipline</span>
+                            <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+                              {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.disciplineRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
+                            </div>
+                          </div>
+                        )}
+                        {fb.teachingQualityRating && (
+                          <div>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Teaching Quality</span>
+                            <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+                              {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.teachingQualityRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
+                            </div>
+                          </div>
+                        )}
+                        {fb.communicationRating && (
+                          <div>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Communication</span>
+                            <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+                              {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.communicationRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
+                            </div>
+                          </div>
+                        )}
+                        {fb.professionalismRating && (
+                          <div>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Professionalism</span>
+                            <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+                              {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.professionalismRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
                     {/* Detailed Review - Full Width (Yellow Theme) */}
                     <div style={{ background: 'linear-gradient(145deg, #fffbeb, #fef3c7)', padding: 20, borderRadius: 12, border: '1px solid #fde68a', gridColumn: '1 / -1', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.05)' }}>
