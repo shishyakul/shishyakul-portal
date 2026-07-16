@@ -63,26 +63,35 @@ export default function StudentsDirectory() {
   }, [isDragging]);
 
   useEffect(() => {
+    // Only fetch if profile is loaded to avoid initial unauthorized or unfiltered data leaks
+    if (!profile) return;
+
     const q = query(collection(db, 'students'), where('status', '==', 'admitted'), limit(limitCount));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       if (profile?.role === 'teacher') {
-        const assigned = profile.assignedBatches || [];
+        let assigned = profile.assignedBatches || [];
+        if (profile.classTeacherBatch) {
+          const classBatches = Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch];
+          assigned = [...new Set([...assigned, ...classBatches])];
+        }
         docs = docs.filter(s => assigned.includes(s.batch));
       }
 
       setStudents(docs);
-      if (!selectedStudent && docs.length > 0) {
-        setSelectedStudent(docs[0]);
-      } else if (selectedStudent) {
-        const updated = docs.find(s => s.id === selectedStudent.id);
-        if (updated) setSelectedStudent(updated);
-      }
+      setSelectedStudent(prev => {
+        if (!prev && docs.length > 0) return docs[0];
+        if (prev) {
+          const updated = docs.find(s => s.id === prev.id);
+          return updated || prev;
+        }
+        return prev;
+      });
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [limitCount]);
+  }, [limitCount, profile?.id]);
 
   const batches = ['All Batches', ...Array.from(new Set(students.map(s => s.batch).filter(Boolean))).sort()];
   

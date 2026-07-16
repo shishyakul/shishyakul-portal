@@ -22,7 +22,7 @@ const formatRole = (role) => {
 };
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'teacher', password: '', joiningDate: '', cvLink: '', subjects: [], classTeacherBatch: '', yearlyTarget: [], assignedBatches: [] });
+  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'teacher', password: '', joiningDate: '', cvLink: '', subjects: [], classTeacherBatch: [], yearlyTarget: [], assignedBatches: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -255,16 +255,29 @@ function AddUserModal({ onClose, onSaved }) {
 
             <div className="form-group" style={{ marginTop: 12 }}>
               <label className="form-label">Class Teacher Of (Batch)</label>
-              <select 
-                className="portal-select" 
-                value={form.classTeacherBatch} 
-                onChange={e => setForm(f => ({...f, classTeacherBatch: e.target.value}))}
-              >
-                <option value="">None (Optional)</option>
-                {Object.values(BATCH_DEF).flat().map(b => (
-                  <option key={b.id} value={b.id}>{b.id}</option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {Object.values(BATCH_DEF).flat().map(b => {
+                  const isSelected = form.classTeacherBatch.includes(b.id);
+                  return (
+                    <div 
+                      key={b.id} 
+                      onClick={() => setForm(f => ({
+                        ...f, 
+                        classTeacherBatch: isSelected ? f.classTeacherBatch.filter(s => s !== b.id) : [...f.classTeacherBatch, b.id]
+                      }))}
+                      style={{ 
+                        padding: '4px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                        background: isSelected ? 'var(--brand-primary)' : 'var(--surface-bg)',
+                        color: isSelected ? '#fff' : 'var(--text-secondary)',
+                        border: `1px solid ${isSelected ? 'var(--brand-primary)' : 'var(--surface-border)'}`,
+                        userSelect: 'none'
+                      }}
+                    >
+                      {b.id}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             
             <div className="form-group" style={{ marginTop: 12 }}>
@@ -312,7 +325,7 @@ function EditUserModal({ user, onClose, onSaved }) {
     role: user.role || 'teacher', 
     password: '',
     subjects: user.subjects ? user.subjects.split(',').map(s => s.trim()).filter(Boolean) : [],
-    classTeacherBatch: user.classTeacherBatch || '',
+    classTeacherBatch: user.classTeacherBatch ? (Array.isArray(user.classTeacherBatch) ? user.classTeacherBatch : [user.classTeacherBatch]) : [],
     assignedBatches: user.assignedBatches || [],
     yearlyTarget: user.yearlyTarget ? user.yearlyTarget.split('|').map(s => s.trim()).filter(Boolean) : []
   });
@@ -487,16 +500,29 @@ function EditUserModal({ user, onClose, onSaved }) {
 
             <div className="form-group" style={{ marginTop: 12 }}>
               <label className="form-label">Class Teacher Of (Batch)</label>
-              <select 
-                className="portal-select" 
-                value={form.classTeacherBatch} 
-                onChange={e => setForm(f => ({...f, classTeacherBatch: e.target.value}))}
-              >
-                <option value="">None (Optional)</option>
-                {Object.values(BATCH_DEF).flat().map(b => (
-                  <option key={b.id} value={b.id}>{b.id}</option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {Object.values(BATCH_DEF).flat().map(b => {
+                  const isSelected = form.classTeacherBatch.includes(b.id);
+                  return (
+                    <div 
+                      key={b.id} 
+                      onClick={() => setForm(f => ({
+                        ...f, 
+                        classTeacherBatch: isSelected ? f.classTeacherBatch.filter(s => s !== b.id) : [...f.classTeacherBatch, b.id]
+                      }))}
+                      style={{ 
+                        padding: '4px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
+                        background: isSelected ? 'var(--brand-primary)' : 'var(--surface-bg)',
+                        color: isSelected ? '#fff' : 'var(--text-secondary)',
+                        border: `1px solid ${isSelected ? 'var(--brand-primary)' : 'var(--surface-border)'}`,
+                        userSelect: 'none'
+                      }}
+                    >
+                      {b.id}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="form-group" style={{ marginTop: 12 }}>
@@ -862,28 +888,30 @@ export default function Users() {
           <h1 className="page-title">Teachers</h1>
           <p className="page-subtitle">Manage Institute Teachers and generate temporary credentials</p>
         </div>
+      </div>
+
+      {/* Filters & Actions */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <input
+            className="portal-input"
+            style={{ maxWidth: 280 }}
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <select className="portal-select" style={{ maxWidth: 160 }}
+            value={filterRole} onChange={e => setFilter(e.target.value)}>
+            <option value="all">All Roles</option>
+            {ROLES.map(r => (
+              <option key={r} value={r}>{formatRole(r)}</option>
+            ))}
+          </select>
+        </div>
         <button className="btn btn-brand" onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
           Add Teacher
         </button>
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <input
-          className="portal-input"
-          style={{ maxWidth: 280 }}
-          placeholder="Search by name or email…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        <select className="portal-select" style={{ maxWidth: 160 }}
-          value={filterRole} onChange={e => setFilter(e.target.value)}>
-          <option value="all">All Roles</option>
-          {ROLES.map(r => (
-            <option key={r} value={r}>{formatRole(r)}</option>
-          ))}
-        </select>
       </div>
 
       {/* Table */}

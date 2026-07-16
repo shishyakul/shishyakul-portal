@@ -134,7 +134,8 @@ export const fetchBatchAnalytics = async (batchName) => {
   const result = {
     avgAttendance: 0,
     avgMarks: 0,
-    students: []
+    students: [],
+    tests: []
   };
 
   try {
@@ -213,6 +214,9 @@ export const fetchBatchAnalytics = async (batchName) => {
       result.avgAttendance = Math.round(totalAtt / studentCount);
       result.avgMarks = Math.round(totalMarks / studentCount);
     }
+    
+    // Sort tests chronologically (newest first)
+    result.tests = testDocs.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
 
     sessionStorage.setItem(cacheKey, JSON.stringify({
       data: result,

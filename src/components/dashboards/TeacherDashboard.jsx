@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchTeacherPerformanceScore, fetchBatchAnalytics } from '../../utils/performanceMetrics';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import TicketDrawer from '../TicketDrawer';
 import NotificationDrawer from '../NotificationDrawer';
 import { subscribeToInbox } from '../../services/tickets';
@@ -321,6 +321,7 @@ export default function TeacherDashboard({ profile }) {
   const [marksData, setMarksData] = useState({});
   const [draftModal, setDraftModal] = useState({ isOpen: false, duty: null, link: '', startDate: null });
   const [postLectureModal, setPostLectureModal] = useState({ isOpen: false, classData: null });
+  const [taskModal, setTaskModal] = useState({ isOpen: false, title: '', type: 'custom_target', dueDate: '' });
 
   const [testRecords, setTestRecords] = useState([]);
   const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
@@ -563,10 +564,11 @@ export default function TeacherDashboard({ profile }) {
   const [fetchingBatch, setFetchingBatch] = useState(false);
 
   useEffect(() => {
-    if (activeTab === 'batches' && !selectedBatchTab && profile?.assignedBatches?.length > 0) {
-      setSelectedBatchTab(profile.assignedBatches[0]);
+    const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
+    if (activeTab === 'batches' && !selectedBatchTab && classTeacherBatches.length > 0) {
+      setSelectedBatchTab(classTeacherBatches[0]);
     }
-  }, [activeTab, profile?.assignedBatches, selectedBatchTab]);
+  }, [activeTab, profile?.classTeacherBatch, selectedBatchTab]);
 
   useEffect(() => {
     if (teacherId) {
@@ -1542,6 +1544,208 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
+      {activeTab === 'tasks' && (
+        <div style={{ padding: '0 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="material-symbols-outlined">arrow_back</span>
+              </button>
+              <h2 style={{ margin: 0, fontSize: 24, color: '#1e293b' }}>Task Manager</h2>
+            </div>
+            <button className="btn-primary" onClick={() => setTaskModal({ isOpen: true, title: '', type: 'custom_target', dueDate: '' })} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined">add</span> Add Task
+            </button>
+          </div>
+
+          <div style={{ background: '#ffffff', borderRadius: 16, padding: 32, minHeight: '600px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+            
+            {/* Notion Style Header */}
+            <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: 16, marginBottom: 24 }}>
+               <h1 style={{ fontSize: 32, fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+                 <span className="material-symbols-outlined" style={{ fontSize: 36, color: '#f59e0b' }}>check_circle</span>
+                 My Workspace
+               </h1>
+               <p style={{ color: '#64748b', fontSize: 15, margin: 0 }}>Organize your duties, lectures, and personal targets.</p>
+            </div>
+
+            {(() => {
+              const allTasks = [
+                ...teacherTasks,
+                ...upcomingTestDuties.map(d => ({
+                  id: 'duty_' + d.testId,
+                  title: (d.isPreparer ? 'Prepare Test: ' : 'Check Test: ') + d.batch + ' - ' + d.topic,
+                  type: 'test_duty',
+                  status: 'pending',
+                  dueDate: null
+                })),
+                ...completedTestDuties.map(d => ({
+                  id: 'duty_' + d.testId,
+                  title: (d.isPreparer ? 'Prepared Test: ' : 'Checked Test: ') + d.batch + ' - ' + d.topic,
+                  type: 'test_duty',
+                  status: 'completed',
+                  dueDate: null
+                }))
+              ];
+
+              const getCategory = (task) => {
+                 if (task.status === 'completed') return 'Completed';
+                 if (task.type === 'test_duty') return 'This Week';
+                 if (!task.dueDate) return 'Long-term Goals';
+                 const due = new Date(task.dueDate);
+                 const today = new Date();
+                 const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+                 if (diffDays <= 1) return 'Today';
+                 if (diffDays <= 7) return 'This Week';
+                 return 'Long-term Goals';
+              };
+
+              const grouped = {
+                 'Today': allTasks.filter(t => getCategory(t) === 'Today'),
+                 'This Week': allTasks.filter(t => getCategory(t) === 'This Week'),
+                 'Long-term Goals': allTasks.filter(t => getCategory(t) === 'Long-term Goals'),
+                 'Completed': allTasks.filter(t => getCategory(t) === 'Completed')
+              };
+
+              const toggleTaskStatus = async (task) => {
+                if (task.id.startsWith('duty_')) {
+                   alert("Test duties are automatically marked complete when you upload the paper or grades!");
+                   return;
+                }
+                const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+                try {
+                  const { doc, updateDoc } = await import('firebase/firestore');
+                  await updateDoc(doc(db, 'tasks', task.id), { status: newStatus });
+                } catch (e) {
+                  console.error(e);
+                }
+              };
+
+              const deleteCustomTask = async (taskId) => {
+                if (taskId.startsWith('duty_')) return;
+                if (!window.confirm("Delete this task?")) return;
+                try {
+                  const { doc, deleteDoc } = await import('firebase/firestore');
+                  await deleteDoc(doc(db, 'tasks', taskId));
+                } catch (e) {
+                  console.error(e);
+                }
+              };
+
+              const renderTaskGroup = (title, groupTasks, icon) => (
+                <div style={{ marginBottom: 32 }}>
+                  <h3 style={{ fontSize: 18, color: '#334155', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#94a3b8' }}>{icon}</span>
+                    {title}
+                    <span style={{ fontSize: 12, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 12 }}>{groupTasks.length}</span>
+                  </h3>
+                  {groupTasks.length === 0 ? (
+                    <div style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 14, fontStyle: 'italic', borderLeft: '2px solid #e2e8f0' }}>No tasks here.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {groupTasks.map(task => (
+                         <div key={task.id} style={{ 
+                            display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', 
+                            background: task.status === 'completed' ? '#f8fafc' : '#ffffff',
+                            borderRadius: 8, border: '1px solid #e2e8f0', transition: 'all 0.2s',
+                            opacity: task.status === 'completed' ? 0.7 : 1
+                         }} className="task-row">
+                            <input 
+                              type="checkbox" 
+                              checked={task.status === 'completed'}
+                              onChange={() => toggleTaskStatus(task)}
+                              style={{ width: 20, height: 20, accentColor: '#10b981', cursor: 'pointer', margin: 0 }}
+                            />
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                               <span style={{ 
+                                 fontSize: 15, fontWeight: 500, color: task.status === 'completed' ? '#94a3b8' : '#1e293b',
+                                 textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                               }}>
+                                 {task.title}
+                               </span>
+                               {task.type === 'test_duty' && <span style={{ fontSize: 11, background: '#fee2e2', color: '#b91c1c', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>TEST DUTY</span>}
+                               {task.type === 'lecture' && <span style={{ fontSize: 11, background: '#e0e7ff', color: '#4338ca', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>LECTURE</span>}
+                               {task.type === 'custom_target' && <span style={{ fontSize: 11, background: '#fef3c7', color: '#b45309', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>TARGET</span>}
+                            </div>
+                            {task.dueDate && (
+                              <span style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>event</span>
+                                {new Date(task.dueDate).toLocaleDateString()}
+                              </span>
+                            )}
+                            {!task.id.startsWith('duty_') && (
+                              <button onClick={() => deleteCustomTask(task.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', display: 'flex', padding: 4 }} title="Delete Task" className="hover-red">
+                                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
+                              </button>
+                            )}
+                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+
+              return (
+                <div>
+                  {renderTaskGroup('Today', grouped['Today'], 'today')}
+                  {renderTaskGroup('This Week', grouped['This Week'], 'date_range')}
+                  {renderTaskGroup('Long-term Goals', grouped['Long-term Goals'], 'flag')}
+                  {renderTaskGroup('Completed', grouped['Completed'], 'task_alt')}
+                </div>
+              );
+            })()}
+          </div>
+          
+          {/* Add Task Modal */}
+          {taskModal.isOpen && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+               <div style={{ background: '#fff', padding: 32, borderRadius: 16, width: 400, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+                 <h2 style={{ margin: '0 0 24px 0', fontSize: 20, color: '#0f172a' }}>Add New Task</h2>
+                 <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!taskModal.title.trim()) return;
+                    try {
+                      await addDoc(collection(db, 'tasks'), {
+                        assigneeId: teacherId,
+                        title: taskModal.title,
+                        type: taskModal.type,
+                        dueDate: taskModal.dueDate ? new Date(taskModal.dueDate).toISOString() : null,
+                        status: 'pending',
+                        createdAt: serverTimestamp()
+                      });
+                      setTaskModal({ isOpen: false, title: '', type: 'custom_target', dueDate: '' });
+                    } catch(err) {
+                      console.error(err);
+                      alert('Failed to save task');
+                    }
+                 }}>
+                   <div style={{ marginBottom: 16 }}>
+                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Task Title</label>
+                     <input type="text" value={taskModal.title} onChange={e => setTaskModal(p => ({...p, title: e.target.value}))} className="form-control" placeholder="e.g. Grade 10th Math assignments" required />
+                   </div>
+                   <div style={{ marginBottom: 16 }}>
+                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Task Type</label>
+                     <select value={taskModal.type} onChange={e => setTaskModal(p => ({...p, type: e.target.value}))} className="form-control">
+                       <option value="custom_target">Custom Target</option>
+                       <option value="lecture">Lecture / Prep</option>
+                       <option value="admin">Admin Duty</option>
+                     </select>
+                   </div>
+                   <div style={{ marginBottom: 24 }}>
+                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Due Date (Optional)</label>
+                     <input type="date" value={taskModal.dueDate} onChange={e => setTaskModal(p => ({...p, dueDate: e.target.value}))} className="form-control" />
+                   </div>
+                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                     <button type="button" onClick={() => setTaskModal({ isOpen: false, title: '', type: 'custom_target', dueDate: '' })} className="btn btn-ghost">Cancel</button>
+                     <button type="submit" className="btn-primary">Save Task</button>
+                   </div>
+                 </form>
+               </div>
+            </div>
+          )}
+        </div>
+      )}
+      
       {activeTab === 'attendance' && (
         <div style={{ padding: '0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -2159,7 +2363,6 @@ export default function TeacherDashboard({ profile }) {
           </div>
         </div>
       )}
-
       {activeTab === 'performance' && (
         <div style={{ padding: '0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -2460,25 +2663,28 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {activeTab === 'batches' && (
+      {activeTab === 'batches' && (() => {
+        const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
+        return (
         <div style={{ padding: '0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
             <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>My Assigned Batches</h2>
+            <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>Class Teacher Dashboard</h2>
           </div>
 
-          {assignedBatches.length === 0 ? (
+          {classTeacherBatches.length === 0 ? (
             <div className="empty-state">
-              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-muted)' }}>group_off</span>
-              <p>You have no assigned batches yet. Contact the Service Manager.</p>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--brand-primary)' }}>admin_panel_settings</span>
+              <h3 style={{ margin: '16px 0 8px 0', fontSize: 20 }}>No Class Teacher Assignment</h3>
+              <p style={{ maxWidth: 400, margin: '0 auto', color: 'var(--text-secondary)' }}>You are not currently assigned as a Class Teacher for any batches. If this is a mistake, please contact the Service Manager.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* Tabs Navigation */}
               <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
-                {assignedBatches.map(batch => (
+                {classTeacherBatches.map(batch => (
                   <button 
                     key={batch}
                     onClick={() => setSelectedBatchTab(batch)}
@@ -2500,7 +2706,7 @@ export default function TeacherDashboard({ profile }) {
               </div>
 
               {/* Render only selected batch */}
-              {assignedBatches.filter(b => b === selectedBatchTab).map(batch => {
+              {classTeacherBatches.filter(b => b === selectedBatchTab).map(batch => {
                 
                 // Aggregate Batch Stats (from our new smart lazy-loaded utility)
                 const avgAttendance = selectedBatchAnalytics.avgAttendance;
@@ -2517,206 +2723,251 @@ export default function TeacherDashboard({ profile }) {
                 }
 
                 return (
-                  <div key={batch} className="portal-card" style={{ padding: 0, overflow: 'hidden', border: 'none', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}>
-                    {/* Batch Header */}
-                    <div style={{ background: 'linear-gradient(135deg, var(--brand-primary), #ff9800)', padding: '24px 32px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-                      <div>
-                        <h3 style={{ margin: '0 0 4px 0', fontSize: 26, fontWeight: 800 }}>{batch}</h3>
-                        <div style={{ fontSize: 14, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>group</span>
-                          {enrichedStudents.length} Students Enrolled
+                  <div key={batch}>
+                    {/* Class Teacher Info */}
+                    {profile?.classTeacherBatch === batch && (
+                      <div style={{ marginBottom: 24, background: 'linear-gradient(to right, #fff8e1, #ffffff)', padding: 16, borderRadius: 12, borderLeft: '4px solid #fbc02d', display: 'flex', gap: 12 }}>
+                        <span className="material-symbols-outlined" style={{ color: '#f57f17', fontSize: 28 }}>stars</span>
+                        <div>
+                          <strong style={{ color: '#f57f17', fontSize: 15, display: 'block', marginBottom: 4 }}>Class Teacher Responsibilities</strong>
+                          <p style={{ margin: 0, fontSize: 13, color: '#795548', lineHeight: 1.5 }}>
+                            You are the primary coordinator for this batch. Ensure regular attendance tracking, monitor test performances, and schedule PTMs for students needing attention.
+                          </p>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 16 }}>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.2)', padding: '12px 20px', borderRadius: 12, backdropFilter: 'blur(10px)' }}>
-                          <span style={{ display: 'block', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.9, fontWeight: 600 }}>Avg Attendance</span>
-                          <span style={{ fontSize: 24, fontWeight: 800 }}>{avgAttendance}%</span>
+                    )}
+
+                    {/* Top Metric Bento Box (Row 1) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginBottom: 24 }}>
+                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255, 152, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f57c00' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>groups</span>
                         </div>
-                        <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.2)', padding: '12px 20px', borderRadius: 12, backdropFilter: 'blur(10px)' }}>
-                          <span style={{ display: 'block', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.9, fontWeight: 600 }}>Avg Marks</span>
-                          <span style={{ fontSize: 24, fontWeight: 800 }}>{avgMarks}%</span>
+                        <div>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Students Enrolled</span>
+                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{enrichedStudents.length}</h4>
+                        </div>
+                      </div>
+                      
+                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(76, 175, 80, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#388e3c' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>co_present</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Avg Attendance</span>
+                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{avgAttendance}%</h4>
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(33, 150, 243, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1976d2' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>auto_graph</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Avg Marks</span>
+                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{avgMarks}%</h4>
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(156, 39, 176, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7b1fa2' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>history_edu</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Tests Conducted</span>
+                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{(selectedBatchAnalytics?.tests || []).length}</h4>
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ padding: 32 }}>
-                      {/* Class Teacher Info */}
-                      {profile?.classTeacherBatch === batch && (
-                        <div style={{ marginBottom: 24, background: 'linear-gradient(to right, #fff8e1, #ffffff)', padding: 16, borderRadius: 12, borderLeft: '4px solid #fbc02d', display: 'flex', gap: 12 }}>
-                          <span className="material-symbols-outlined" style={{ color: '#f57f17', fontSize: 28 }}>stars</span>
-                          <div>
-                            <strong style={{ color: '#f57f17', fontSize: 15, display: 'block', marginBottom: 4 }}>Class Teacher Responsibilities</strong>
-                            <p style={{ margin: 0, fontSize: 13, color: '#795548', lineHeight: 1.5 }}>
-                              You are the primary coordinator for this batch. Ensure regular attendance tracking, monitor test performances, and schedule PTMs for students needing attention.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Syllabus Tracker */}
-                      <div style={{ marginBottom: 32, paddingBottom: 32, borderBottom: '1px solid var(--surface-border)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'flex-end' }}>
-                          <div>
-                            <h4 style={{ margin: '0 0 4px 0', fontSize: 16, color: 'var(--text-primary)' }}>Syllabus Progress</h4>
-                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Update the overall completion percentage and log the latest topic.</span>
-                          </div>
-                          <span style={{ color: 'var(--brand-primary)', fontWeight: '900', fontSize: 24 }}>{syllabusUpdates[batch] || 0}%</span>
-                        </div>
-                        
-                        <div style={{ marginBottom: 20 }}>
-                           <input 
-                            type="range" 
-                            min="0" max="100" 
-                            value={syllabusUpdates[batch] || 0}
-                            onChange={(e) => setSyllabusUpdates(prev => ({ ...prev, [batch]: e.target.value }))}
-                            style={{ width: '100%', cursor: 'pointer', accentColor: '#ff9800', height: 8 }}
-                          />
-                        </div>
+                    {/* Analytics Core (Row 2) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 24 }}>
+                      {/* Left Column: Line Chart */}
+                      <div style={{ flex: '1 1 500px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ color: '#f57c00' }}>monitoring</span>
+                          Class Performance Trend
+                        </h4>
+                        {(() => {
+                          const allTests = selectedBatchAnalytics?.tests || [];
+                          const chartData = [...allTests].reverse().map(test => {
+                            const sumMarks = test.results?.reduce((acc, r) => acc + (r.percentage || 0), 0) || 0;
+                            const avgTestMark = test.results?.length ? Math.round(sumMarks / test.results.length) : 0;
+                            const dateObj = new Date(test.uploadedAt || test.date);
+                            const dateLabel = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                            return {
+                              name: `${test.subject.substring(0,3)} ${dateLabel}`,
+                              fullDate: dateLabel,
+                              topic: test.topic || 'Test',
+                              average: avgTestMark
+                            };
+                          });
 
-                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                          <div style={{ flex: 1, position: 'relative' }}>
-                            <span className="material-symbols-outlined" style={{ position: 'absolute', left: 12, top: 10, color: 'var(--text-muted)' }}>edit_note</span>
-                            <input 
-                              type="text" 
-                              placeholder="Subject Log (e.g. Completed Ch 4: Polynomials)" 
-                              className="portal-input"
-                              style={{ paddingLeft: 40, height: 44 }}
-                              value={syllabusLogs[batch] || ''}
-                              onChange={(e) => setSyllabusLogs(prev => ({ ...prev, [batch]: e.target.value }))}
-                            />
-                          </div>
-                          <button className="btn btn-brand" onClick={() => handleSaveProgress(batch)} style={{ height: 44, padding: '0 24px' }}>
-                            Save Progress
-                          </button>
-                        </div>
+                          return chartData.length > 0 ? (
+                            <div style={{ height: 250, width: '100%', flex: 1 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} dy={10} />
+                                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} />
+                                  <Tooltip 
+                                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                    formatter={(value) => [`${value}%`, 'Class Average']}
+                                    labelFormatter={(label, payload) => payload?.[0]?.payload?.topic || label}
+                                  />
+                                  <Line type="monotone" dataKey="average" stroke="#f57c00" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9e9e9e', fontSize: 14 }}>
+                              No test data available for trend.
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      
+                      {/* Right Column: Rankings */}
+                      <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                        {(() => {
+                          const sortedStudents = [...enrichedStudents].sort((a, b) => (b.sMark || 0) - (a.sMark || 0));
+                          const top5 = sortedStudents.slice(0, 5);
+                          const bottom5 = [...sortedStudents].reverse().slice(0, 5).filter(s => (s.sMark || 0) < 70);
+                          
+                          return (
+                            <>
+                              {/* Top 5 Performers */}
+                              {top5.length > 0 && (
+                                <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', flex: '1', overflowY: 'auto', maxHeight: 250 }}>
+                                  <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#f57f17', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>emoji_events</span>
+                                    Top Performers
+                                  </h4>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {top5.map((student, idx) => (
+                                      <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 12, borderBottom: idx !== top5.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                                        <div style={{ 
+                                          width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+                                          background: idx === 0 ? '#fff8e1' : idx === 1 ? '#f5f5f5' : idx === 2 ? '#efebe9' : 'transparent',
+                                          color: idx === 0 ? '#fbc02d' : idx === 1 ? '#9e9e9e' : idx === 2 ? '#8d6e63' : '#bdbdbd'
+                                        }}>
+                                          #{idx + 1}
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                          <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
+                                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Avg Marks: <strong>{student.sMark}%</strong></span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Needs Attention */}
+                              {bottom5.length > 0 && (
+                                <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', flex: '1', overflowY: 'auto', maxHeight: 250 }}>
+                                  <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#d32f2f', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>warning</span>
+                                    Needs Attention
+                                  </h4>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {bottom5.map(student => (
+                                      <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #f5f5f5' }}>
+                                        <div>
+                                          <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
+                                          <span style={{ fontSize: 12, color: '#d32f2f' }}>Avg: {student.sMark}%</span>
+                                        </div>
+                                        <button 
+                                          className="btn btn-ghost btn-sm" 
+                                          onClick={() => setPtmStudent(student)}
+                                          style={{ color: '#d32f2f', padding: '4px 8px', borderRadius: 4, background: '#ffebee' }}
+                                          title="Schedule PTM"
+                                        >
+                                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>video_camera_front</span>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Logs & History (Row 3) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                      {/* Recent Test History */}
+                      <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)', fontSize: 20 }}>history_edu</span>
+                          Recent Test History
+                        </h4>
+                        {(() => {
+                          const recentTests = selectedBatchAnalytics?.tests || [];
+                          return recentTests.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              {recentTests.slice(0, 5).map((test, idx) => {
+                                const sumMarks = test.results?.reduce((acc, r) => acc + (r.percentage || 0), 0) || 0;
+                                const avgTestMark = test.results?.length ? Math.round(sumMarks / test.results.length) : 0;
+                                
+                                return (
+                                  <div key={idx} style={{ padding: '12px 0', borderBottom: idx !== Math.min(recentTests.length, 5) - 1 ? '1px solid #f5f5f5' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                      <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{test.subject} - {test.topic}</h5>
+                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{new Date(test.uploadedAt || test.date).toLocaleDateString()} | Max: {test.maxMarks}</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <strong style={{ fontSize: 15, color: avgTestMark < 60 ? '#d32f2f' : '#388e3c' }}>{avgTestMark}%</strong>
+                                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)' }}>Class Avg</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>No tests recorded yet.</p>
+                          );
+                        })()}
                       </div>
 
                       {/* Self Study Activity Logs */}
-                      {batchSelfStudyLogs.filter(att => !att.log.teacherScore).length > 0 && (
-                        <div style={{ marginBottom: 32, paddingBottom: 32, borderBottom: '1px solid var(--surface-border)' }}>
-                          <h4 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>menu_book</span>
-                            Batch Self-Study Activity
-                          </h4>
-                          <div className="grid-auto-300">
-                            {batchSelfStudyLogs.filter(att => !att.log.teacherScore).map(att => {
-                              const studentInfo = enrichedStudents.find(s => s.id === att.studentId);
-                              const studentName = studentInfo ? (studentInfo.fullName || studentInfo.studentName || studentInfo.name) : 'Unknown Student';
-                              
-                              return (
-                                <div key={att.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 12, border: '1px solid var(--surface-border)' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, borderBottom: '1px solid var(--surface-border)', paddingBottom: 8 }}>
-                                    <div>
-                                      <strong style={{ fontSize: 15, display: 'block' }}>{studentName}</strong>
-                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{new Date(att.date).toLocaleDateString()}</span>
-                                    </div>
-                                    <div style={{ fontSize: 11, background: '#f5f5f5', padding: '4px 8px', borderRadius: 4, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                      <span>In: {att.inOutTime?.in || '--'}</span>
-                                      <span>Out: {att.inOutTime?.out || '--'}</span>
-                                    </div>
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--brand-primary)', marginTop: 2 }}>subject</span>
-                                      <div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Subject</div>
-                                        <div style={{ fontSize: 14, fontWeight: 500 }}>{att.log.subject || 'Not specified'}</div>
-                                      </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#f97316', marginTop: 2 }}>import_contacts</span>
-                                      <div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Topic / Syllabus</div>
-                                        <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{att.log.topic || 'No details provided'}</div>
-                                      </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#4caf50', marginTop: 2 }}>more_time</span>
-                                      <div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Time Logged</div>
-                                        <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{att.log.timeLogged || '--'} mins</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  <button 
-                                    className="btn btn-brand" 
-                                    style={{ marginTop: 16, width: '100%', height: 36, fontSize: 13, display: 'flex', justifyContent: 'center' }}
-                                    onClick={() => setRatingModal({ isOpen: true, docId: att.docId, studentId: att.studentId, score: 10 })}
-                                  >
-                                    <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 6 }}>stars</span>
-                                    Rate Effort
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Students List */}
-                      <div>
-                        <h4 style={{ margin: '0 0 20px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="material-symbols-outlined" style={{ color: '#1976d2' }}>analytics</span>
-                          Student Analytics
+                      <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)', fontSize: 20 }}>menu_book</span>
+                          Self-Study Log
                         </h4>
-                        
-                        <div className="grid-auto-300" style={{ gap: 20 }}>
-                          {enrichedStudents.map(student => (
-                            <div key={student.id} className="portal-card hover-lift" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
-                              
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(25, 118, 210, 0.1)', color: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 'bold' }}>
-                                    {((student.fullName || student.studentName || student.name || '?')?.[0]).toUpperCase()}
+                        {(() => {
+                          const unscoredLogs = batchSelfStudyLogs.filter(att => !att.log.teacherScore);
+                          return unscoredLogs.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              {unscoredLogs.map(att => {
+                                const studentInfo = enrichedStudents.find(s => s.id === att.studentId);
+                                const studentName = studentInfo ? (studentInfo.fullName || studentInfo.studentName || studentInfo.name) : 'Student';
+                                
+                                return (
+                                  <div key={att.id} style={{ background: '#fafafa', padding: 12, borderRadius: 8, border: '1px solid #eeeeee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                      <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{studentName}</h5>
+                                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{att.log.subject} - {att.log.topic} ({att.log.timeLogged}m)</span>
+                                    </div>
+                                    <button 
+                                      className="btn btn-ghost btn-sm" 
+                                      onClick={() => setRatingModal({ isOpen: true, docId: att.docId, studentId: att.studentId, score: 10 })}
+                                      style={{ color: '#f57c00', padding: '4px 8px', borderRadius: 4, background: '#fff3e0', whiteSpace: 'nowrap' }}
+                                    >
+                                      Rate Effort
+                                    </button>
                                   </div>
-                                  <div>
-                                    <h5 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Unknown Student'}</h5>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>ID: {student.id.slice(0,6)}</span>
-                                  </div>
-                                </div>
-                                {student.needsFeedback && (
-                                  <span style={{ background: '#ffebee', color: '#c62828', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>warning</span>
-                                    Review Due
-                                  </span>
-                                )}
-                              </div>
-
-                              <div style={{ display: 'flex', gap: 12 }}>
-                                <div style={{ flex: 1, background: '#f5f5f5', padding: 12, borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                  <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 4 }}>Attendance</span>
-                                  <span style={{ fontSize: 20, fontWeight: 800, color: student.sAtt < 75 ? '#c62828' : '#2e7d32' }}>{student.sAtt}%</span>
-                                </div>
-                                <div style={{ flex: 1, background: '#f5f5f5', padding: 12, borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                  <span style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 4 }}>Marks</span>
-                                  <span style={{ fontSize: 20, fontWeight: 800, color: student.sMark < 60 ? '#c62828' : '#1565c0' }}>{student.sMark}%</span>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
-                                <button 
-                                  className="btn btn-sm" 
-                                  onClick={() => setFeedbackStudent(student)}
-                                  style={{ flex: 1, background: student.needsFeedback ? '#e65100' : 'var(--brand-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: 'none' }}
-                                >
-                                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rate_review</span>
-                                  Feedback
-                                </button>
-                                <button 
-                                  className="btn btn-sm" 
-                                  onClick={() => setPtmStudent(student)}
-                                  style={{ flex: 1, background: '#ffebee', color: '#c62828', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid #ffcdd2' }}
-                                >
-                                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>video_camera_front</span>
-                                  Call PTM
-                                </button>
-                              </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
+                          ) : (
+                            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>All self-study logs have been rated.</p>
+                          );
+                        })()}
                       </div>
-
                     </div>
                   </div>
                 );
@@ -2761,7 +3012,7 @@ export default function TeacherDashboard({ profile }) {
             </div>
           )}
         </div>
-      )}
+      ); })()}
 
           {activeTab === 'timetable' && (
             <div className="portal-card" style={{ padding: 0, overflow: 'hidden' }}>
