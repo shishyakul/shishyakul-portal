@@ -231,6 +231,10 @@ export default function TeacherDashboard({ profile }) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const assignedSubjects = profile?.subjects 
+    ? (Array.isArray(profile.subjects) ? profile.subjects : profile.subjects.split(',').map(s => s.trim()).filter(Boolean)) 
+    : [SUBJECTS[0]];
+
   const [isTicketOpen, setIsTicketOpen] = useState(false);
   
   // Ticket Notification Logic
@@ -313,7 +317,7 @@ export default function TeacherDashboard({ profile }) {
   const [iProfileOpen, setIProfileOpen] = useState(false);
 
   const [gradingModal, setGradingModal] = useState({ isOpen: false, testId: null, batch: '', maxMarks: 0, testDate: '', subject: '', topic: '', batchStudents: [] });
-  const [classTestModal, setClassTestModal] = useState({ isOpen: false, step: 1, form: { date: '', time: '', subject: SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
+  const [classTestModal, setClassTestModal] = useState({ isOpen: false, step: 1, form: { date: '', time: '', subject: assignedSubjects[0] || SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
   const [marksData, setMarksData] = useState({});
   const [draftModal, setDraftModal] = useState({ isOpen: false, duty: null, link: '', startDate: null });
   const [postLectureModal, setPostLectureModal] = useState({ isOpen: false, classData: null });
@@ -3201,7 +3205,7 @@ export default function TeacherDashboard({ profile }) {
                     const hours = now.getHours().toString().padStart(2, '0');
                     const mins = now.getMinutes().toString().padStart(2, '0');
                     const currentTime = `${hours}:${mins}`;
-                    setClassTestModal({ isOpen: true, step: 1, form: { date: currentDate, time: currentTime, subject: SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
+                    setClassTestModal({ isOpen: true, step: 1, form: { date: currentDate, time: currentTime, subject: assignedSubjects[0] || SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
                   }}
                 >
                   + Add Class Test
@@ -3395,7 +3399,7 @@ export default function TeacherDashboard({ profile }) {
                   <div className="form-group">
                     <label className="form-label">Subject</label>
                     <select className="portal-select" value={classTestModal.form.subject} onChange={e => setClassTestModal({ ...classTestModal, form: { ...classTestModal.form, subject: e.target.value } })}>
-                      {SUBJECTS.map(s => (
+                      {assignedSubjects.map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
@@ -3648,10 +3652,13 @@ export default function TeacherDashboard({ profile }) {
       )}
       {viewTestRecord && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 800, maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
               <div>
-                <h2 style={{ margin: '0 0 8px 0', fontSize: 22 }}>Test Marks: {viewTestRecord.batch}</h2>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>analytics</span>
+                  Subject Test Statistics: {viewTestRecord.batch}
+                </h2>
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
                   <strong>{viewTestRecord.subject}</strong> ({viewTestRecord.topic}) | Max Marks: {viewTestRecord.maxMarks}
                 </p>
@@ -3659,32 +3666,113 @@ export default function TeacherDashboard({ profile }) {
               <button className="btn-ghost" onClick={() => setViewTestRecord(null)}>Close</button>
             </div>
             
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
-                  <th style={{ padding: 12, textAlign: 'center' }}>Rank</th>
-                  <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
-                  <th style={{ padding: 12, textAlign: 'center' }}>Marks</th>
-                  <th style={{ padding: 12, textAlign: 'center' }}>Percentage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {viewTestRecord.results?.sort((a,b) => a.batchRank - b.batchRank).map(res => {
-                  const student = viewTestRecordStudents.find(s => s.id === res.studentId);
-                  const studentName = student ? (student.fullName || student.studentName || student.name || 'Unknown') : 'ID: ' + res.studentId.slice(0, 6);
-                  return (
-                    <tr key={res.studentId} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold', color: res.batchRank === 1 ? '#fbc02d' : 'inherit' }}>#{res.batchRank}</td>
-                      <td style={{ padding: 12, textAlign: 'left' }}>{studentName}</td>
-                      <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>{res.marks}</td>
-                      <td style={{ padding: 12, textAlign: 'center' }}>
-                        <span style={{ color: Number(res.percentage) < 33 ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{res.percentage}%</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            {(() => {
+              const results = viewTestRecord.results || [];
+              if (results.length === 0) return <p style={{ color: 'var(--text-muted)' }}>No results found for this test.</p>;
+              
+              const avgMarks = (results.reduce((acc, curr) => acc + Number(curr.marks), 0) / results.length).toFixed(1);
+              const avgPercent = (results.reduce((acc, curr) => acc + Number(curr.percentage), 0) / results.length).toFixed(1);
+              
+              const sortedResults = [...results].sort((a,b) => b.marks - a.marks);
+              const highest = sortedResults[0];
+              const lowest = sortedResults[sortedResults.length - 1];
+              
+              const getStudentName = (sid) => {
+                const s = viewTestRecordStudents.find(s => s.id === sid);
+                return s ? (s.fullName || s.studentName || s.name || 'Unknown') : 'ID: ' + sid.slice(0, 6);
+              };
+
+              const dist = { excellent: 0, good: 0, average: 0, poor: 0 };
+              results.forEach(r => {
+                const p = Number(r.percentage);
+                if (p >= 90) dist.excellent++;
+                else if (p >= 75) dist.good++;
+                else if (p >= 50) dist.average++;
+                else dist.poor++;
+              });
+
+              const chartData = [
+                { name: '>90%', count: dist.excellent, fill: '#2e7d32' },
+                { name: '75-90%', count: dist.good, fill: '#1976d2' },
+                { name: '50-75%', count: dist.average, fill: '#fbc02d' },
+                { name: '<50%', count: dist.poor, fill: '#c62828' }
+              ];
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <div className="grid-3" style={{ gap: 16 }}>
+                    <div style={{ padding: 16, background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: 8 }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Class Average</p>
+                      <h3 style={{ margin: 0, fontSize: 24, color: 'var(--brand-primary)' }}>{avgPercent}%</h3>
+                      <p style={{ margin: 0, fontSize: 12, color: '#666' }}>Avg Marks: {avgMarks} / {viewTestRecord.maxMarks}</p>
+                    </div>
+                    <div style={{ padding: 16, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: 13, color: '#166534', fontWeight: 600 }}>Highest Performer</p>
+                      <h3 style={{ margin: 0, fontSize: 20, color: '#15803d' }}>{getStudentName(highest.studentId)}</h3>
+                      <p style={{ margin: 0, fontSize: 12, color: '#166534' }}>{highest.marks} marks ({highest.percentage}%)</p>
+                    </div>
+                    <div style={{ padding: 16, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: 13, color: '#991b1b', fontWeight: 600 }}>Lowest Performer</p>
+                      <h3 style={{ margin: 0, fontSize: 20, color: '#b91c1c' }}>{getStudentName(lowest.studentId)}</h3>
+                      <p style={{ margin: 0, fontSize: 12, color: '#991b1b' }}>{lowest.marks} marks ({lowest.percentage}%)</p>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 16, border: '1px solid #e0e0e0', borderRadius: 8 }}>
+                    <h4 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Score Distribution</h4>
+                    <div style={{ height: 200, width: '100%' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={chartData} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5}>
+                            {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                            <Label value={`${results.length} Students`} position="center" style={{ fontSize: '14px', fontWeight: 'bold', fill: '#333' }} />
+                          </Pie>
+                          <Tooltip />
+                          <Legend verticalAlign="middle" align="right" layout="vertical" />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Rankings</h4>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                          <th style={{ padding: 12, textAlign: 'center', width: 80 }}>Rank</th>
+                          <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Marks</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Percentage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedResults.map((res, idx) => {
+                          const rank = idx + 1;
+                          let rankColor = 'inherit';
+                          let bg = 'transparent';
+                          if (rank === 1) { rankColor = '#b8860b'; bg = '#fffbeb'; }
+                          else if (rank === 2) { rankColor = '#475569'; bg = '#f8fafc'; }
+                          else if (rank === 3) { rankColor = '#9a3412'; bg = '#fff7ed'; }
+
+                          return (
+                            <tr key={res.studentId} style={{ borderBottom: '1px solid #eee', background: bg }}>
+                              <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold', color: rankColor, fontSize: rank <= 3 ? 16 : 14 }}>
+                                #{rank} {rank <= 3 && <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>workspace_premium</span>}
+                              </td>
+                              <td style={{ padding: 12, textAlign: 'left', fontWeight: rank <= 3 ? 600 : 400 }}>{getStudentName(res.studentId)}</td>
+                              <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>{res.marks}</td>
+                              <td style={{ padding: 12, textAlign: 'center' }}>
+                                <span style={{ color: Number(res.percentage) < 33 ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{res.percentage}%</span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
