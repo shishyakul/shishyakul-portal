@@ -157,9 +157,9 @@ const TicketItem = ({ ticket, isInbox, getRoleLabel, user, profile }) => {
   );
 };
 
-export default function TicketDrawer({ isOpen, onClose }) {
+export default function TicketDrawer({ isOpen, onClose, initialTab = 'inbox', initialSubject = '' }) {
   const { profile, user } = useAuth();
-  const [activeTab, setActiveTab] = useState('inbox'); // 'inbox', 'sent', 'compose'
+  const [activeTab, setActiveTab] = useState(initialTab); // 'inbox', 'sent', 'compose'
   
   const [inboxTickets, setInboxTickets] = useState([]);
   const [sentTickets, setSentTickets] = useState([]);
@@ -173,25 +173,32 @@ export default function TicketDrawer({ isOpen, onClose }) {
   const [teacherList, setTeacherList] = useState([]);
 
   useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+      if (initialSubject) setSubject(initialSubject);
+    }
+  }, [isOpen, initialTab, initialSubject]);
+
+  useEffect(() => {
     if (!profile?.role || !user?.uid) return;
     
     const unsubInbox = subscribeToInbox(profile.role, user.uid, setInboxTickets);
     const unsubSent = subscribeToSent(user.uid, setSentTickets);
     
-    // If user is NOT a teacher, fetch actual teachers for targeting
-    if (profile.role !== 'teacher') {
-      const fetchTeachers = async () => {
-        try {
-          const q = query(collection(db, 'users'), where('role', '==', 'teacher'));
-          const snap = await getDocs(q);
-          const teachers = snap.docs.map(doc => ({ id: doc.id, label: doc.data().fullName || doc.data().displayName || 'Unknown Teacher' }));
-          setTeacherList(teachers);
-        } catch (err) {
-          console.error("Failed to fetch teachers", err);
-        }
-      };
-      fetchTeachers();
-    }
+    // Fetch actual teachers for targeting, regardless of user role (teachers can message other teachers)
+    const fetchTeachers = async () => {
+      try {
+        const q = query(collection(db, 'users'), where('role', '==', 'teacher'));
+        const snap = await getDocs(q);
+        const teachers = snap.docs
+          .map(doc => ({ id: doc.id, label: doc.data().fullName || doc.data().displayName || 'Unknown Teacher' }))
+          .filter(t => t.id !== user.uid); // exclude self
+        setTeacherList(teachers);
+      } catch (err) {
+        console.error("Failed to fetch teachers", err);
+      }
+    };
+    fetchTeachers();
     
     return () => {
       unsubInbox();
@@ -199,9 +206,10 @@ export default function TicketDrawer({ isOpen, onClose }) {
     };
   }, [profile, user]);
 
-  const availableTargets = profile?.role === 'teacher' 
-    ? PORTAL_ROLES.filter(r => r.id !== 'teacher') 
-    : teacherList;
+  const availableTargets = [
+    ...PORTAL_ROLES.filter(r => r.id !== 'teacher'),
+    ...teacherList
+  ];
 
   const getRoleLabel = (id) => {
     const role = PORTAL_ROLES.find(r => r.id === id);

@@ -236,6 +236,16 @@ export default function TeacherDashboard({ profile }) {
     : [SUBJECTS[0]];
 
   const [isTicketOpen, setIsTicketOpen] = useState(false);
+  const [ticketInitialTab, setTicketInitialTab] = useState('inbox');
+  const [ticketInitialSubject, setTicketInitialSubject] = useState('');
+  
+  const [testHistoryFilter, setTestHistoryFilter] = useState('all'); // 'all', 'class', 'weekly'
+  
+  const openTicketDrawer = (tab = 'inbox', subject = '') => {
+    setTicketInitialTab(tab);
+    setTicketInitialSubject(subject);
+    setIsTicketOpen(true);
+  };
   
   // Ticket Notification Logic
   const [hasNewTicketAlert, setHasNewTicketAlert] = useState(false);
@@ -327,6 +337,10 @@ export default function TeacherDashboard({ profile }) {
   const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
   const [viewTestRecord, setViewTestRecord] = useState(null);
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
+
+  // --- Class Teacher Hub Widget Modals ---
+  const [activeWidgetModal, setActiveWidgetModal] = useState(null);
+  const [expandedTestId, setExpandedTestId] = useState(null);
 
   const [feedbackStudent, setFeedbackStudent] = useState(null);
   const [teacherAttendanceRecords, setTeacherAttendanceRecords] = useState([]);
@@ -1221,29 +1235,64 @@ export default function TeacherDashboard({ profile }) {
             {/* Right Column (Widgets) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               
-              {/* Small Professional Countdown Widget */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #ffffff, #f8fafc)', 
-                padding: '20px 24px', 
-                borderRadius: 16, 
-                border: '1px solid #e2e8f0', 
-                boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 46, height: 46, borderRadius: '12px', background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 26 }}>timer</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                {/* Small Professional Countdown Widget */}
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #ffffff, #f8fafc)', 
+                  padding: '20px 24px', 
+                  borderRadius: 16, 
+                  border: '1px solid #e2e8f0', 
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: '12px', background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 26 }}>timer</span>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b', fontWeight: 'bold' }}>Board Exams</h3>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>Target Preparation</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b', fontWeight: 'bold' }}>Board Exams</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>Target Preparation</p>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: 32, fontWeight: '900', color: '#ef4444', lineHeight: 1 }}>{boardDaysLeft}</span>
+                    <div style={{ fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 4 }}>Days Left</div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: 32, fontWeight: '900', color: '#ef4444', lineHeight: 1 }}>{boardDaysLeft}</span>
-                  <div style={{ fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 4 }}>Days Left</div>
+
+                {/* Small Performance Score Widget */}
+                <div 
+                  onClick={() => handleTabChange('performance')}
+                  style={{ 
+                    background: 'linear-gradient(135deg, #ffffff, #f8fafc)', 
+                    padding: '20px 24px', 
+                    borderRadius: 16, 
+                    border: '1px solid #e2e8f0', 
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: '12px', background: '#e0f2fe', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 26 }}>workspace_premium</span>
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b', fontWeight: 'bold' }}>Performance</h3>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>Overall Score</p>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: 32, fontWeight: '900', color: '#0ea5e9', lineHeight: 1 }}>{perfData.totalScore}</span>
+                    <div style={{ fontSize: 11, fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 4 }}>Out of 100</div>
+                  </div>
                 </div>
               </div>
 
@@ -2739,7 +2788,7 @@ export default function TeacherDashboard({ profile }) {
 
                     {/* Top Metric Bento Box (Row 1) */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginBottom: 24 }}>
-                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div onClick={() => setActiveWidgetModal('enrolled')} style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', transition: 'box-shadow 0.2s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                         <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(255, 152, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f57c00' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 24 }}>groups</span>
                         </div>
@@ -2749,7 +2798,7 @@ export default function TeacherDashboard({ profile }) {
                         </div>
                       </div>
                       
-                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div onClick={() => setActiveWidgetModal('attendance')} style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', transition: 'box-shadow 0.2s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                         <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(76, 175, 80, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#388e3c' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 24 }}>co_present</span>
                         </div>
@@ -2759,7 +2808,7 @@ export default function TeacherDashboard({ profile }) {
                         </div>
                       </div>
 
-                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div onClick={() => setActiveWidgetModal('marks')} style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', transition: 'box-shadow 0.2s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                         <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(33, 150, 243, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1976d2' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 24 }}>auto_graph</span>
                         </div>
@@ -2769,7 +2818,7 @@ export default function TeacherDashboard({ profile }) {
                         </div>
                       </div>
 
-                      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div onClick={() => setActiveWidgetModal('tests')} style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', transition: 'box-shadow 0.2s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                         <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(156, 39, 176, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7b1fa2' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 24 }}>history_edu</span>
                         </div>
@@ -3093,6 +3142,385 @@ export default function TeacherDashboard({ profile }) {
               </div>
             </div>
           )}
+
+          {/* --- TOP METRIC DEEP-DIVE MODALS --- */}
+          {activeWidgetModal && (() => {
+            const enrichedStudents = selectedBatchAnalytics?.students || [];
+            return (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+              <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                
+                {/* Modal Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
+                  <h2 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    {activeWidgetModal === 'enrolled' && <><span className="material-symbols-outlined" style={{ color: '#f57c00' }}>groups</span> Enrolled Students Directory</>}
+                    {activeWidgetModal === 'attendance' && <><span className="material-symbols-outlined" style={{ color: '#388e3c' }}>co_present</span> Detailed Attendance Analytics</>}
+                    {activeWidgetModal === 'marks' && <><span className="material-symbols-outlined" style={{ color: '#1976d2' }}>auto_graph</span> Subject-Wise Marks Breakdown</>}
+                    {activeWidgetModal === 'tests' && <><span className="material-symbols-outlined" style={{ color: '#7b1fa2' }}>history_edu</span> Test History & Performance</>}
+                  </h2>
+                  <button className="btn-ghost" onClick={() => setActiveWidgetModal(null)} style={{ padding: '8px', borderRadius: '50%', display: 'flex' }}>
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+
+                {/* Modal Body (Scrollable) */}
+                <div style={{ overflowY: 'auto', flex: 1, paddingRight: 8 }}>
+                  
+                  {/* WIDGET 1: ENROLLED STUDENTS */}
+                  {activeWidgetModal === 'enrolled' && (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+                        <tr style={{ borderBottom: '2px solid #ddd' }}>
+                          <th style={{ padding: 12, textAlign: 'center', width: 60 }}>Rank</th>
+                          <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Overall Avg</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Attendance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...enrichedStudents].sort((a,b) => (b.sMark||0) - (a.sMark||0)).map((student, idx) => {
+                          const rank = idx + 1;
+                          const isTop = rank <= Math.max(1, Math.ceil(enrichedStudents.length * 0.1));
+                          const isBottom = rank >= Math.max(2, Math.floor(enrichedStudents.length * 0.9));
+                          return (
+                            <tr key={student.id} style={{ borderBottom: '1px solid #eee', background: isTop ? '#fffbeb' : isBottom ? '#fef2f2' : 'transparent' }}>
+                              <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>
+                                #{rank} {isTop ? '🌟' : isBottom ? '⚠️' : ''}
+                              </td>
+                              <td style={{ padding: 12, textAlign: 'left', fontWeight: 500 }}>{student.studentName || student.fullName || 'Unknown Student'}</td>
+                              <td style={{ padding: 12, textAlign: 'center' }}>{student.sMark || 0}%</td>
+                              <td style={{ padding: 12, textAlign: 'center' }}>{student.sAtt || 0}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* WIDGET 2: AVG ATTENDANCE */}
+                  {activeWidgetModal === 'attendance' && (
+                    <>
+                      <div style={{ marginBottom: 16, padding: 12, background: '#f8f9fa', borderRadius: 8, display: 'inline-block' }}>
+                        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Total Lectures Conducted to Date: </span>
+                        <strong style={{ fontSize: 16 }}>{enrichedStudents[0]?.totalClasses || 0}</strong>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+                          <tr style={{ borderBottom: '2px solid #ddd' }}>
+                            <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
+                            <th style={{ padding: 12, textAlign: 'center' }}>Attendance %</th>
+                            <th style={{ padding: 12, textAlign: 'center' }}>Attended</th>
+                            <th style={{ padding: 12, textAlign: 'center' }}>Absent</th>
+                            <th style={{ padding: 12, textAlign: 'center', width: 100 }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...enrichedStudents].sort((a,b) => (a.sAtt||0) - (b.sAtt||0)).map(student => {
+                            const att = student.sAtt || 0;
+                            const attColor = att >= 85 ? '#2e7d32' : att >= 75 ? '#ed6c02' : '#d32f2f';
+                            const attBg = att >= 85 ? '#e8f5e9' : att >= 75 ? '#fff3e0' : '#ffebee';
+                            return (
+                              <tr key={student.id} style={{ borderBottom: '1px solid #eee' }}>
+                                <td style={{ padding: 12, textAlign: 'left', fontWeight: 500 }}>{student.studentName || student.fullName || 'Unknown Student'}</td>
+                                <td style={{ padding: 12, textAlign: 'center' }}>
+                                  <span style={{ background: attBg, color: attColor, padding: '4px 8px', borderRadius: 12, fontWeight: 'bold' }}>{att}%</span>
+                                </td>
+                                <td style={{ padding: 12, textAlign: 'center' }}>{student.attendedClasses || 0}</td>
+                                <td style={{ padding: 12, textAlign: 'center', color: (student.absentClasses||0) > 0 ? '#d32f2f' : 'inherit', fontWeight: (student.absentClasses||0) > 0 ? 'bold' : 'normal' }}>{student.absentClasses || 0}</td>
+                                <td style={{ padding: 12, textAlign: 'center' }}>
+                                  {att < 75 ? (
+                                    <button 
+                                      className="btn-ghost" 
+                                      style={{ padding: '6px 12px', color: '#d32f2f', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto', background: '#ffebee', borderRadius: 6, border: '1px solid #ffcdd2' }} 
+                                      title="Send Alert"
+                                      onClick={() => openTicketDrawer('compose', `Low Attendance Alert: ${student.studentName || student.fullName}`)}
+                                    >
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>warning</span>
+                                      Alert
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      className="btn-ghost" 
+                                      style={{ padding: '6px 12px', color: '#1976d2', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto', background: '#e3f2fd', borderRadius: 6, border: '1px solid #bbdefb' }} 
+                                      title="Send Message"
+                                      onClick={() => openTicketDrawer('compose', `Message for ${student.studentName || student.fullName}: `)}
+                                    >
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
+                                      Message
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+
+                  {/* WIDGET 3: AVG MARKS */}
+                  {activeWidgetModal === 'marks' && (() => {
+                    const allTests = selectedBatchAnalytics?.tests || [];
+                    const uniqueSubjects = [...new Set(allTests.map(t => t.subject))].filter(Boolean);
+                    
+                    return (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+                          <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+                            <tr style={{ borderBottom: '2px solid #ddd' }}>
+                              <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
+                              <th style={{ padding: 12, textAlign: 'center', borderRight: '1px solid #eee' }}>Overall Avg</th>
+                              {uniqueSubjects.map(sub => (
+                                <th key={sub} style={{ padding: 12, textAlign: 'center' }}>{sub}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...enrichedStudents].sort((a,b) => (b.sMark||0) - (a.sMark||0)).map(student => {
+                              return (
+                                <tr key={student.id} style={{ borderBottom: '1px solid #eee' }}>
+                                  <td style={{ padding: 12, textAlign: 'left', fontWeight: 500 }}>{student.studentName || student.fullName || 'Unknown Student'}</td>
+                                  <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold', borderRight: '1px solid #eee' }}>{student.sMark || 0}%</td>
+                                  {uniqueSubjects.map(sub => {
+                                    const subjectTests = allTests.filter(t => t.subject === sub);
+                                    let obtained = 0, total = 0;
+                                    subjectTests.forEach(t => {
+                                      if (t.results && Array.isArray(t.results)) {
+                                        const r = t.results.find(res => res.studentId === student.id);
+                                        if (r) {
+                                          obtained += Number(r.marks || 0);
+                                          total += Number(t.maxMarks || 0);
+                                        }
+                                      }
+                                    });
+                                    const subAvg = total > 0 ? Math.round((obtained / total) * 100) : null;
+                                    
+                                    let bg = 'transparent', color = 'inherit';
+                                    if (subAvg !== null) {
+                                      if (subAvg >= 75) { bg = '#e8f5e9'; color = '#2e7d32'; }
+                                      else if (subAvg >= 33) { bg = '#fff9c4'; color = '#f57f17'; }
+                                      else { bg = '#ffebee'; color = '#c62828'; }
+                                    }
+
+                                    return (
+                                      <td key={sub} style={{ padding: 12, textAlign: 'center', background: bg, color, fontWeight: subAvg !== null ? 'bold' : 'normal' }}>
+                                        {subAvg !== null ? `${obtained}/${total}` : '-'}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+
+                  {/* WIDGET 4: TESTS CONDUCTED */}
+                  {activeWidgetModal === 'tests' && (() => {
+                    const parseTestDate = (dStr) => {
+                      if (!dStr) return 0;
+                      const d = new Date(dStr);
+                      if (!isNaN(d)) return d.getTime();
+                      const pts = String(dStr).split(/[-/]/);
+                      if(pts.length === 3) {
+                        const yr = pts[2].length === 2 ? `20${pts[2]}` : pts[2];
+                        const newD = new Date(`${yr}-${pts[1]}-${pts[0]}`);
+                        if(!isNaN(newD)) return newD.getTime();
+                      }
+                      return 0;
+                    };
+
+                    const allTests = [...(selectedBatchAnalytics?.tests || [])].sort((a,b) => parseTestDate(b.testDate || b.uploadedAt) - parseTestDate(a.testDate || a.uploadedAt));
+                    
+                    const filteredTests = testHistoryFilter === 'all' 
+                      ? allTests 
+                      : allTests.filter(t => testHistoryFilter === 'class' ? (t.testType === 'Class Test' || t.topic === 'Class Test') : (t.testType !== 'Class Test' && t.topic !== 'Class Test'));
+
+                    if (allTests.length === 0) return <div style={{ textAlign: 'center', padding: '40px 20px' }}><span className="material-symbols-outlined" style={{ fontSize: 48, color: '#ccc', marginBottom: 12 }}>history_edu</span><p style={{ margin: 0, color: '#888', fontSize: 15 }}>No tests conducted yet.</p></div>;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 0 }}>
+                          <button 
+                            className={`btn-ghost ${testHistoryFilter === 'all' ? 'active' : ''}`}
+                            style={{ padding: '6px 16px', borderRadius: 20, background: testHistoryFilter === 'all' ? '#1976d2' : '#f5f5f5', color: testHistoryFilter === 'all' ? '#fff' : '#666', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, transition: 'all 0.2s' }}
+                            onClick={() => setTestHistoryFilter('all')}
+                          >
+                            All Tests
+                          </button>
+                          <button 
+                            className={`btn-ghost ${testHistoryFilter === 'class' ? 'active' : ''}`}
+                            style={{ padding: '6px 16px', borderRadius: 20, background: testHistoryFilter === 'class' ? '#ed6c02' : '#f5f5f5', color: testHistoryFilter === 'class' ? '#fff' : '#666', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, transition: 'all 0.2s' }}
+                            onClick={() => setTestHistoryFilter('class')}
+                          >
+                            Class Test
+                          </button>
+                          <button 
+                            className={`btn-ghost ${testHistoryFilter === 'weekly' ? 'active' : ''}`}
+                            style={{ padding: '6px 16px', borderRadius: 20, background: testHistoryFilter === 'weekly' ? '#9c27b0' : '#f5f5f5', color: testHistoryFilter === 'weekly' ? '#fff' : '#666', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, transition: 'all 0.2s' }}
+                            onClick={() => setTestHistoryFilter('weekly')}
+                          >
+                            Weekly Test
+                          </button>
+                        </div>
+                        
+                        {filteredTests.length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '20px', color: '#888', fontStyle: 'italic', background: '#fafafa', borderRadius: 8 }}>
+                            No tests match this filter.
+                          </div>
+                        )}
+                        
+                        {filteredTests.map((test, index) => {
+                          const currentId = test.id || String(index);
+                          const isExpanded = expandedTestId === currentId;
+                          
+                          // Calculate Top 3
+                          let top3 = [];
+                          let sortedResults = [];
+                          let avgStr = '-';
+                          let avgM = 0;
+                          if (test.results && Array.isArray(test.results) && test.results.length > 0) {
+                            sortedResults = [...test.results].sort((a,b) => Number(b.marks) - Number(a.marks));
+                            top3 = sortedResults.slice(0, 3).map(r => {
+                              const s = enrichedStudents.find(st => st.id === r.studentId);
+                              return { name: s ? (s.studentName || s.fullName || 'Unknown Student') : 'Unknown', marks: Number(r.marks) || 0 };
+                            });
+                            
+                            const totalM = test.results.reduce((acc, curr) => acc + (Number(curr.marks) || 0), 0);
+                            avgM = Math.round((totalM / test.results.length) / Number(test.maxMarks || 1) * 100);
+                            avgStr = `${avgM}%`;
+                          }
+
+                          const testTs = parseTestDate(test.testDate || test.uploadedAt);
+                          const formattedDate = testTs ? new Date(testTs).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown Date';
+
+                          const medals = ['🥇', '🥈', '🥉'];
+                          const medalColors = ['#fffbeb', '#f8f9fa', '#fdf6e3'];
+                          const borderColors = ['#fde68a', '#e2e8f0', '#fed7aa'];
+
+                          return (
+                            <div key={test.id || index} style={{ border: '1px solid #eaeaea', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'all 0.3s' }}>
+                              <div 
+                                style={{ padding: '20px 24px', background: isExpanded ? '#f4f6f8' : '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'background 0.2s' }}
+                                onClick={() => setExpandedTestId(isExpanded ? null : currentId)}
+                                onMouseEnter={e => e.currentTarget.style.background = isExpanded ? '#f4f6f8' : '#fafafa'}
+                                onMouseLeave={e => e.currentTarget.style.background = isExpanded ? '#f4f6f8' : '#ffffff'}
+                              >
+                                <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#edf2f7', padding: '8px 12px', borderRadius: 8, minWidth: 70 }}>
+                                    <span style={{ fontSize: 18, fontWeight: 'bold', color: '#2d3748', lineHeight: 1 }}>{formattedDate.split(' ')[0]}</span>
+                                    <span style={{ fontSize: 12, color: '#718096', textTransform: 'uppercase', fontWeight: 600 }}>{formattedDate.split(' ')[1]}</span>
+                                  </div>
+                                  <div>
+                                    <strong style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, color: '#1a202c', marginBottom: 4 }}>
+                                      {test.subject}
+                                      <span style={{ fontSize: 12, background: '#e2e8f0', padding: '2px 8px', borderRadius: 12, color: '#4a5568', fontWeight: 500 }}>{test.topic}</span>
+                                    </strong>
+                                    <span style={{ fontSize: 13, color: '#718096', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>assignment</span>
+                                      {test.testType || 'Class Test'} • Max Marks: <strong>{test.maxMarks}</strong>
+                                    </span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                    <span style={{ fontSize: 11, color: '#a0aec0', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>Class Avg</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <div style={{ width: 60, height: 6, background: '#edf2f7', borderRadius: 3, overflow: 'hidden' }}>
+                                        <div style={{ width: `${avgM}%`, height: '100%', background: avgM > 75 ? '#48bb78' : avgM > 40 ? '#ecc94b' : '#f56565', borderRadius: 3 }}></div>
+                                      </div>
+                                      <strong style={{ color: '#2d3748', fontSize: 15 }}>{avgStr}</strong>
+                                    </div>
+                                  </div>
+                                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#edf2f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <span className="material-symbols-outlined" style={{ color: '#4a5568', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }}>expand_more</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {isExpanded && (
+                                <div style={{ background: '#fff', borderTop: '1px solid #eaeaea', animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column' }}>
+                                  
+                                  {/* Quick Stats Header */}
+                                  <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #edf2f7', display: 'flex', gap: 24 }}>
+                                    <div style={{ fontSize: 13, color: '#4a5568' }}>Total Appeared: <strong>{test.results?.length || 0}</strong></div>
+                                    <div style={{ fontSize: 13, color: '#4a5568' }}>Highest Marks: <strong>{sortedResults[0]?.marks || 0}</strong></div>
+                                    <div style={{ fontSize: 13, color: '#4a5568' }}>Class Average: <strong>{avgStr}</strong></div>
+                                  </div>
+
+                                  {/* Full Roster Table */}
+                                  <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                      <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                        <tr>
+                                          <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Rank</th>
+                                          <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Student Name</th>
+                                          <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Marks</th>
+                                          <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Percentage</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {sortedResults && sortedResults.length > 0 ? sortedResults.map((r, i) => {
+                                          const s = enrichedStudents.find(st => st.id === r.studentId);
+                                          const sName = s ? (s.studentName || s.fullName || 'Unknown') : 'Unknown';
+                                          const pct = test.maxMarks > 0 ? Math.round((Number(r.marks) / test.maxMarks) * 100) : 0;
+                                          let bg = '#fff';
+                                          let medal = '';
+                                          if (i === 0) { bg = '#fffdf0'; medal = '🥇 '; }
+                                          else if (i === 1) { bg = '#f8f9fa'; medal = '🥈 '; }
+                                          else if (i === 2) { bg = '#fef8ec'; medal = '🥉 '; }
+
+                                          return (
+                                            <tr key={i} style={{ background: bg, borderBottom: '1px solid #edf2f7', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = bg}>
+                                              <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: i < 3 ? 'bold' : 500, color: i < 3 ? '#d97706' : '#4a5568' }}>
+                                                {medal} #{i + 1}
+                                              </td>
+                                              <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: 500, color: '#1a202c' }}>
+                                                {sName}
+                                              </td>
+                                              <td style={{ padding: '12px 24px', textAlign: 'center', fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>
+                                                {r.marks} <span style={{ color: '#a0aec0', fontSize: 12, fontWeight: 500 }}>/ {test.maxMarks}</span>
+                                              </td>
+                                              <td style={{ padding: '12px 24px', textAlign: 'center' }}>
+                                                <span style={{ 
+                                                  background: pct >= 75 ? '#def7ec' : pct >= 40 ? '#fdf6b2' : '#fde8e8', 
+                                                  color: pct >= 75 ? '#03543f' : pct >= 40 ? '#723b13' : '#9b1c1c', 
+                                                  padding: '4px 10px', 
+                                                  borderRadius: 12, 
+                                                  fontSize: 12, 
+                                                  fontWeight: 'bold' 
+                                                }}>{pct}%</span>
+                                              </td>
+                                            </tr>
+                                          )
+                                        }) : (
+                                          <tr>
+                                            <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: '#718096', fontSize: 14 }}>
+                                              Results have not been uploaded for this test yet.
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+
+                </div>
+              </div>
+            </div>
+            );
+          })()}
+
         </div>
       ); })()}
 
@@ -4218,7 +4646,12 @@ export default function TeacherDashboard({ profile }) {
       )}
 
       {/* Global Ticket Drawer for Teachers */}
-      <TicketDrawer isOpen={isTicketOpen} onClose={() => setIsTicketOpen(false)} />
+      <TicketDrawer 
+        isOpen={isTicketOpen} 
+        onClose={() => setIsTicketOpen(false)} 
+        initialTab={ticketInitialTab}
+        initialSubject={ticketInitialSubject}
+      />
 
     </div>
   );

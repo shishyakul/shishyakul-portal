@@ -120,7 +120,7 @@ export const fetchTeacherPerformanceScore = async (teacherId) => {
  * @returns {Promise<{avgAttendance: number, avgMarks: number, students: Array}>}
  */
 export const fetchBatchAnalytics = async (batchName) => {
-  const cacheKey = `batch_analytics_v2_${batchName}`;
+  const cacheKey = `batch_analytics_v3_${batchName}`;
   const cachedData = sessionStorage.getItem(cacheKey);
   
   if (cachedData) {
@@ -182,13 +182,16 @@ export const fetchBatchAnalytics = async (batchName) => {
 
       // 2. Calculate Marks
       const studentTests = testDocs.filter(t => t.results?.some(r => r.studentId === s.id));
-      const totalTests = studentTests.length;
-      let sumMarksPct = 0;
+      let totalObtained = 0;
+      let totalMax = 0;
       studentTests.forEach(t => {
         const tr = t.results.find(r => r.studentId === s.id);
-        sumMarksPct += (tr.percentage || 0);
+        if (tr) {
+          totalObtained += Number(tr.marks || 0);
+          totalMax += Number(t.maxMarks || 0);
+        }
       });
-      const sMark = totalTests > 0 ? Math.round(sumMarksPct / totalTests) : 0;
+      const sMark = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
       
       // 3. Feedback Logic
       let needsFeedback = true;
