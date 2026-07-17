@@ -2780,124 +2780,76 @@ export default function TeacherDashboard({ profile }) {
                       </div>
                     </div>
 
-                    {/* Analytics Core (Row 2) */}
+                    {/* Rankings (Row 1) */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 24 }}>
-                      {/* Left Column: Line Chart */}
-                      <div style={{ flex: '1 1 500px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', flexDirection: 'column' }}>
-                        <h4 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="material-symbols-outlined" style={{ color: '#f57c00' }}>monitoring</span>
-                          Class Performance Trend
-                        </h4>
-                        {(() => {
-                          const allTests = selectedBatchAnalytics?.tests || [];
-                          const chartData = [...allTests].reverse().map(test => {
-                            const sumMarks = test.results?.reduce((acc, r) => acc + (r.percentage || 0), 0) || 0;
-                            const avgTestMark = test.results?.length ? Math.round(sumMarks / test.results.length) : 0;
-                            const dateObj = new Date(test.uploadedAt || test.date);
-                            const dateLabel = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-                            return {
-                              name: `${test.subject.substring(0,3)} ${dateLabel}`,
-                              fullDate: dateLabel,
-                              topic: test.topic || 'Test',
-                              average: avgTestMark
-                            };
-                          });
-
-                          return chartData.length > 0 ? (
-                            <div style={{ height: 250, width: '100%', flex: 1 }}>
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} dy={10} />
-                                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} />
-                                  <Tooltip 
-                                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    formatter={(value) => [`${value}%`, 'Class Average']}
-                                    labelFormatter={(label, payload) => payload?.[0]?.payload?.topic || label}
-                                  />
-                                  <Line type="monotone" dataKey="average" stroke="#f57c00" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          ) : (
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9e9e9e', fontSize: 14 }}>
-                              No test data available for trend.
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      
-                      {/* Right Column: Rankings */}
-                      <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-                        {(() => {
-                          const sortedStudents = [...enrichedStudents].sort((a, b) => (b.sMark || 0) - (a.sMark || 0));
-                          const top5 = sortedStudents.slice(0, 5);
-                          const bottom5 = [...sortedStudents].reverse().slice(0, 5).filter(s => (s.sMark || 0) < 70);
-                          
-                          return (
-                            <>
-                              {/* Top 5 Performers */}
-                              {top5.length > 0 && (
-                                <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', flex: '1', overflowY: 'auto', maxHeight: 250 }}>
-                                  <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#f57f17', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>emoji_events</span>
-                                    Top Performers
-                                  </h4>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {top5.map((student, idx) => (
-                                      <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 12, borderBottom: idx !== top5.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
-                                        <div style={{ 
-                                          width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
-                                          background: idx === 0 ? '#fff8e1' : idx === 1 ? '#f5f5f5' : idx === 2 ? '#efebe9' : 'transparent',
-                                          color: idx === 0 ? '#fbc02d' : idx === 1 ? '#9e9e9e' : idx === 2 ? '#8d6e63' : '#bdbdbd'
-                                        }}>
-                                          #{idx + 1}
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                          <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
-                                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Avg Marks: <strong>{student.sMark}%</strong></span>
-                                        </div>
+                      {(() => {
+                        const sortedStudents = [...enrichedStudents].sort((a, b) => (b.sMark || 0) - (a.sMark || 0));
+                        const top5 = sortedStudents.slice(0, 5);
+                        const bottom5 = [...sortedStudents].reverse().slice(0, 5).filter(s => (s.sMark || 0) < 70);
+                        
+                        return (
+                          <>
+                            {/* Top 5 Performers */}
+                            {top5.length > 0 && (
+                              <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', overflowY: 'auto', maxHeight: 250 }}>
+                                <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#f57f17', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>emoji_events</span>
+                                  Top Performers
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                  {top5.map((student, idx) => (
+                                    <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 12, borderBottom: idx !== top5.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                                      <div style={{ 
+                                        width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+                                        background: idx === 0 ? '#fff8e1' : idx === 1 ? '#f5f5f5' : idx === 2 ? '#efebe9' : 'transparent',
+                                        color: idx === 0 ? '#fbc02d' : idx === 1 ? '#9e9e9e' : idx === 2 ? '#8d6e63' : '#bdbdbd'
+                                      }}>
+                                        #{idx + 1}
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Needs Attention */}
-                              {bottom5.length > 0 && (
-                                <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', flex: '1', overflowY: 'auto', maxHeight: 250 }}>
-                                  <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#d32f2f', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>warning</span>
-                                    Needs Attention
-                                  </h4>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {bottom5.map(student => (
-                                      <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #f5f5f5' }}>
-                                        <div>
-                                          <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
-                                          <span style={{ fontSize: 12, color: '#d32f2f' }}>Avg: {student.sMark}%</span>
-                                        </div>
-                                        <button 
-                                          className="btn btn-ghost btn-sm" 
-                                          onClick={() => setPtmStudent(student)}
-                                          style={{ color: '#d32f2f', padding: '4px 8px', borderRadius: 4, background: '#ffebee' }}
-                                          title="Schedule PTM"
-                                        >
-                                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>video_camera_front</span>
-                                        </button>
+                                      <div style={{ flex: 1 }}>
+                                        <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
+                                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Avg Marks: <strong>{student.sMark}%</strong></span>
                                       </div>
-                                    ))}
-                                  </div>
+                                    </div>
+                                  ))}
                                 </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
+                              </div>
+                            )}
+
+                            {/* Needs Attention */}
+                            {bottom5.length > 0 && (
+                              <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', overflowY: 'auto', maxHeight: 250 }}>
+                                <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: '#d32f2f', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>warning</span>
+                                  Needs Attention
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                  {bottom5.map(student => (
+                                    <div key={student.id} style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #f5f5f5' }}>
+                                      <div>
+                                        <h5 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{student.fullName || student.studentName || student.name || 'Student'}</h5>
+                                        <span style={{ fontSize: 12, color: '#d32f2f' }}>Avg: {student.sMark}%</span>
+                                      </div>
+                                      <button 
+                                        className="btn btn-ghost btn-sm" 
+                                        onClick={() => setPtmStudent(student)}
+                                        style={{ color: '#d32f2f', padding: '4px 8px', borderRadius: 4, background: '#ffebee' }}
+                                        title="Schedule PTM"
+                                      >
+                                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>video_camera_front</span>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
-                    {/* Logs & History (Row 3) */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                    {/* Logs & History (Row 2) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 24 }}>
                       {/* Recent Test History */}
                       <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee' }}>
                         <h4 style={{ margin: '0 0 16px 0', fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2965,6 +2917,136 @@ export default function TeacherDashboard({ profile }) {
                             </div>
                           ) : (
                             <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>All self-study logs have been rated.</p>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Analytics Core (Row 3) */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 24 }}>
+                      {/* Left Column: Line Chart */}
+                      <div style={{ flex: '1 1 500px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ color: '#f57c00' }}>monitoring</span>
+                          Class Performance Trend
+                        </h4>
+                        {(() => {
+                          const allTests = selectedBatchAnalytics?.tests || [];
+                          const chartData = [...allTests].reverse().map(test => {
+                            const sumMarks = test.results?.reduce((acc, r) => acc + (r.percentage || 0), 0) || 0;
+                            const avgTestMark = test.results?.length ? Math.round(sumMarks / test.results.length) : 0;
+                            const dateObj = new Date(test.uploadedAt || test.date);
+                            const dateLabel = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                            return {
+                              name: `${test.subject.substring(0,3)} ${dateLabel}`,
+                              fullDate: dateLabel,
+                              topic: test.topic || 'Test',
+                              average: avgTestMark
+                            };
+                          });
+
+                          return chartData.length > 0 ? (
+                            <div style={{ height: 280, width: '100%', minHeight: 280, marginTop: 16 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} dy={10} />
+                                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9e9e9e' }} axisLine={false} tickLine={false} />
+                                  <Tooltip 
+                                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                    formatter={(value) => [`${value}%`, 'Class Average']}
+                                    labelFormatter={(label, payload) => payload?.[0]?.payload?.topic || label}
+                                  />
+                                  <Line type="monotone" dataKey="average" stroke="#f57c00" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9e9e9e', fontSize: 14 }}>
+                              No test data available for trend.
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Right Column: Subject Averages Pie Chart */}
+                      <div style={{ flex: '1 1 300px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #eeeeee', display: 'flex', flexDirection: 'column' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-outlined" style={{ color: '#0288d1' }}>pie_chart</span>
+                          Subject Averages
+                        </h4>
+                        {(() => {
+                          const allTests = selectedBatchAnalytics?.tests || [];
+                          
+                          if (allTests.length === 0) {
+                            return (
+                              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9e9e9e', fontSize: 14 }}>
+                                No test data available.
+                              </div>
+                            );
+                          }
+
+                          // Group by subject
+                          const subjectDataMap = {};
+                          allTests.forEach(test => {
+                            if (!test.subject) return;
+                            const subject = test.subject;
+                            const sumMarks = test.results?.reduce((acc, r) => acc + (r.percentage || 0), 0) || 0;
+                            const avgTestMark = test.results?.length ? (sumMarks / test.results.length) : 0;
+                            
+                            if (!subjectDataMap[subject]) {
+                              subjectDataMap[subject] = { sum: 0, count: 0 };
+                            }
+                            subjectDataMap[subject].sum += avgTestMark;
+                            subjectDataMap[subject].count += 1;
+                          });
+
+                          const pieData = Object.keys(subjectDataMap).map(subject => ({
+                            name: subject,
+                            value: Math.round(subjectDataMap[subject].sum / subjectDataMap[subject].count)
+                          }));
+
+                          // Only show subjects that have an average > 0
+                          const filteredPieData = pieData.filter(d => d.value > 0);
+                          
+                          if (filteredPieData.length === 0) {
+                            return (
+                              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9e9e9e', fontSize: 14 }}>
+                                No scored test data available.
+                              </div>
+                            );
+                          }
+
+                          const COLORS = ['#f57c00', '#4caf50', '#0288d1', '#9c27b0', '#e91e63', '#009688'];
+
+                          return (
+                            <div style={{ height: 280, width: '100%', minHeight: 280, marginTop: 16 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                  <Pie
+                                    data={filteredPieData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={50}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    stroke="none"
+                                    label={({ name, value }) => `${value}%`}
+                                    labelLine={false}
+                                  >
+                                    {filteredPieData.map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip 
+                                    formatter={(value) => [`${value}%`, 'Average Marks']}
+                                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                  />
+                                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
                           );
                         })()}
                       </div>
