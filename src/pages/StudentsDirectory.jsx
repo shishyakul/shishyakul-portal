@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -22,6 +22,7 @@ export default function StudentsDirectory() {
   const [isDragging, setIsDragging] = useState(false);
   const [limitCount, setLimitCount] = useState(50);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleMove = (clientX) => {
@@ -81,6 +82,10 @@ export default function StudentsDirectory() {
 
       setStudents(docs);
       setSelectedStudent(prev => {
+        if (location.state?.studentId) {
+          const fromState = docs.find(s => s.id === location.state.studentId);
+          if (fromState) return fromState;
+        }
         if (!prev && docs.length > 0) return docs[0];
         if (prev) {
           const updated = docs.find(s => s.id === prev.id);

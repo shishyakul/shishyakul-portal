@@ -321,7 +321,6 @@ export default function TeacherDashboard({ profile }) {
   const [timetable, setTimetable] = useState({});
   const [timetableHeaderDate, setTimetableHeaderDate] = useState('');
   const [testWorkflows, setTestWorkflows] = useState({});
-  const [teacherTasks, setTeacherTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [iProfileOpen, setIProfileOpen] = useState(false);
@@ -717,16 +716,6 @@ export default function TeacherDashboard({ profile }) {
       setSyllabusUpdates(upds);
       setSyllabusLogs(lgs);
     });
-
-    // 6. Listen to Tasks
-    let unsubTasks = () => {};
-    if (teacherId) {
-      const qTasks = query(collection(db, 'tasks'), where('assigneeId', '==', teacherId));
-      unsubTasks = onSnapshot(qTasks, (snap) => {
-        setTeacherTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-    }
-
     // 7. Listen to Test Records
     let unsubTestRecords = () => {};
     if (teacherId) {
@@ -745,7 +734,6 @@ export default function TeacherDashboard({ profile }) {
       unsubSyl(); 
       unsubUsers();
       unsubWorkflows();
-      unsubTasks();
       unsubTestRecords();
     };
   }, [profile?.assignedBatches, teacherId]);
@@ -1235,7 +1223,7 @@ export default function TeacherDashboard({ profile }) {
             {/* Right Column (Widgets) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                 {/* Small Professional Countdown Widget */}
                 <div style={{ 
                   background: 'linear-gradient(135deg, #ffffff, #f8fafc)', 
@@ -1558,14 +1546,6 @@ export default function TeacherDashboard({ profile }) {
                <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>View your daily timetable</p>
              </div>
              
-             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('tasks')}>
-               <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>checklist</span>
-               </div>
-               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Weekly Task</h3>
-               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Manage manager-assigned tasks</p>
-             </div>
-             
              <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('target')}>
                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>target</span>
@@ -1593,207 +1573,6 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {activeTab === 'tasks' && (
-        <div style={{ padding: '0 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-outlined">arrow_back</span>
-              </button>
-              <h2 style={{ margin: 0, fontSize: 24, color: '#1e293b' }}>Task Manager</h2>
-            </div>
-            <button className="btn-primary" onClick={() => setTaskModal({ isOpen: true, title: '', type: 'custom_target', dueDate: '' })} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="material-symbols-outlined">add</span> Add Task
-            </button>
-          </div>
-
-          <div style={{ background: '#ffffff', borderRadius: 16, padding: 32, minHeight: '600px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-            
-            {/* Notion Style Header */}
-            <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: 16, marginBottom: 24 }}>
-               <h1 style={{ fontSize: 32, fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-                 <span className="material-symbols-outlined" style={{ fontSize: 36, color: '#f59e0b' }}>check_circle</span>
-                 My Workspace
-               </h1>
-               <p style={{ color: '#64748b', fontSize: 15, margin: 0 }}>Organize your duties, lectures, and personal targets.</p>
-            </div>
-
-            {(() => {
-              const allTasks = [
-                ...teacherTasks,
-                ...upcomingTestDuties.map(d => ({
-                  id: 'duty_' + d.testId,
-                  title: (d.isPreparer ? 'Prepare Test: ' : 'Check Test: ') + d.batch + ' - ' + d.topic,
-                  type: 'test_duty',
-                  status: 'pending',
-                  dueDate: null
-                })),
-                ...completedTestDuties.map(d => ({
-                  id: 'duty_' + d.testId,
-                  title: (d.isPreparer ? 'Prepared Test: ' : 'Checked Test: ') + d.batch + ' - ' + d.topic,
-                  type: 'test_duty',
-                  status: 'completed',
-                  dueDate: null
-                }))
-              ];
-
-              const getCategory = (task) => {
-                 if (task.status === 'completed') return 'Completed';
-                 if (task.type === 'test_duty') return 'This Week';
-                 if (!task.dueDate) return 'Long-term Goals';
-                 const due = new Date(task.dueDate);
-                 const today = new Date();
-                 const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-                 if (diffDays <= 1) return 'Today';
-                 if (diffDays <= 7) return 'This Week';
-                 return 'Long-term Goals';
-              };
-
-              const grouped = {
-                 'Today': allTasks.filter(t => getCategory(t) === 'Today'),
-                 'This Week': allTasks.filter(t => getCategory(t) === 'This Week'),
-                 'Long-term Goals': allTasks.filter(t => getCategory(t) === 'Long-term Goals'),
-                 'Completed': allTasks.filter(t => getCategory(t) === 'Completed')
-              };
-
-              const toggleTaskStatus = async (task) => {
-                if (task.id.startsWith('duty_')) {
-                   alert("Test duties are automatically marked complete when you upload the paper or grades!");
-                   return;
-                }
-                const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-                try {
-                  const { doc, updateDoc } = await import('firebase/firestore');
-                  await updateDoc(doc(db, 'tasks', task.id), { status: newStatus });
-                } catch (e) {
-                  console.error(e);
-                }
-              };
-
-              const deleteCustomTask = async (taskId) => {
-                if (taskId.startsWith('duty_')) return;
-                if (!window.confirm("Delete this task?")) return;
-                try {
-                  const { doc, deleteDoc } = await import('firebase/firestore');
-                  await deleteDoc(doc(db, 'tasks', taskId));
-                } catch (e) {
-                  console.error(e);
-                }
-              };
-
-              const renderTaskGroup = (title, groupTasks, icon) => (
-                <div style={{ marginBottom: 32 }}>
-                  <h3 style={{ fontSize: 18, color: '#334155', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#94a3b8' }}>{icon}</span>
-                    {title}
-                    <span style={{ fontSize: 12, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 12 }}>{groupTasks.length}</span>
-                  </h3>
-                  {groupTasks.length === 0 ? (
-                    <div style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 14, fontStyle: 'italic', borderLeft: '2px solid #e2e8f0' }}>No tasks here.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {groupTasks.map(task => (
-                         <div key={task.id} style={{ 
-                            display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', 
-                            background: task.status === 'completed' ? '#f8fafc' : '#ffffff',
-                            borderRadius: 8, border: '1px solid #e2e8f0', transition: 'all 0.2s',
-                            opacity: task.status === 'completed' ? 0.7 : 1
-                         }} className="task-row">
-                            <input 
-                              type="checkbox" 
-                              checked={task.status === 'completed'}
-                              onChange={() => toggleTaskStatus(task)}
-                              style={{ width: 20, height: 20, accentColor: '#10b981', cursor: 'pointer', margin: 0 }}
-                            />
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
-                               <span style={{ 
-                                 fontSize: 15, fontWeight: 500, color: task.status === 'completed' ? '#94a3b8' : '#1e293b',
-                                 textDecoration: task.status === 'completed' ? 'line-through' : 'none'
-                               }}>
-                                 {task.title}
-                               </span>
-                               {task.type === 'test_duty' && <span style={{ fontSize: 11, background: '#fee2e2', color: '#b91c1c', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>TEST DUTY</span>}
-                               {task.type === 'lecture' && <span style={{ fontSize: 11, background: '#e0e7ff', color: '#4338ca', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>LECTURE</span>}
-                               {task.type === 'custom_target' && <span style={{ fontSize: 11, background: '#fef3c7', color: '#b45309', padding: '4px 8px', borderRadius: 4, fontWeight: 600 }}>TARGET</span>}
-                            </div>
-                            {task.dueDate && (
-                              <span style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>event</span>
-                                {new Date(task.dueDate).toLocaleDateString()}
-                              </span>
-                            )}
-                            {!task.id.startsWith('duty_') && (
-                              <button onClick={() => deleteCustomTask(task.id)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', display: 'flex', padding: 4 }} title="Delete Task" className="hover-red">
-                                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
-                              </button>
-                            )}
-                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-
-              return (
-                <div>
-                  {renderTaskGroup('Today', grouped['Today'], 'today')}
-                  {renderTaskGroup('This Week', grouped['This Week'], 'date_range')}
-                  {renderTaskGroup('Long-term Goals', grouped['Long-term Goals'], 'flag')}
-                  {renderTaskGroup('Completed', grouped['Completed'], 'task_alt')}
-                </div>
-              );
-            })()}
-          </div>
-          
-          {/* Add Task Modal */}
-          {taskModal.isOpen && (
-            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-               <div style={{ background: '#fff', padding: 32, borderRadius: 16, width: 400, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-                 <h2 style={{ margin: '0 0 24px 0', fontSize: 20, color: '#0f172a' }}>Add New Task</h2>
-                 <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!taskModal.title.trim()) return;
-                    try {
-                      await addDoc(collection(db, 'tasks'), {
-                        assigneeId: teacherId,
-                        title: taskModal.title,
-                        type: taskModal.type,
-                        dueDate: taskModal.dueDate ? new Date(taskModal.dueDate).toISOString() : null,
-                        status: 'pending',
-                        createdAt: serverTimestamp()
-                      });
-                      setTaskModal({ isOpen: false, title: '', type: 'custom_target', dueDate: '' });
-                    } catch(err) {
-                      console.error(err);
-                      alert('Failed to save task');
-                    }
-                 }}>
-                   <div style={{ marginBottom: 16 }}>
-                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Task Title</label>
-                     <input type="text" value={taskModal.title} onChange={e => setTaskModal(p => ({...p, title: e.target.value}))} className="form-control" placeholder="e.g. Grade 10th Math assignments" required />
-                   </div>
-                   <div style={{ marginBottom: 16 }}>
-                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Task Type</label>
-                     <select value={taskModal.type} onChange={e => setTaskModal(p => ({...p, type: e.target.value}))} className="form-control">
-                       <option value="custom_target">Custom Target</option>
-                       <option value="lecture">Lecture / Prep</option>
-                       <option value="admin">Admin Duty</option>
-                     </select>
-                   </div>
-                   <div style={{ marginBottom: 24 }}>
-                     <label style={{ display: 'block', fontSize: 13, color: '#475569', marginBottom: 8 }}>Due Date (Optional)</label>
-                     <input type="date" value={taskModal.dueDate} onChange={e => setTaskModal(p => ({...p, dueDate: e.target.value}))} className="form-control" />
-                   </div>
-                   <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                     <button type="button" onClick={() => setTaskModal({ isOpen: false, title: '', type: 'custom_target', dueDate: '' })} className="btn btn-ghost">Cancel</button>
-                     <button type="submit" className="btn-primary">Save Task</button>
-                   </div>
-                 </form>
-               </div>
-            </div>
-          )}
-        </div>
-      )}
       
       {activeTab === 'attendance' && (
         <div style={{ padding: '0 8px' }}>
@@ -3148,7 +2927,7 @@ export default function TeacherDashboard({ profile }) {
             const enrichedStudents = selectedBatchAnalytics?.students || [];
             return (
             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-              <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+              <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 1200, maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
                 
                 {/* Modal Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #eee' }}>
@@ -3173,8 +2952,14 @@ export default function TeacherDashboard({ profile }) {
                         <tr style={{ borderBottom: '2px solid #ddd' }}>
                           <th style={{ padding: 12, textAlign: 'center', width: 60 }}>Rank</th>
                           <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Contact</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>School</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Dispersal</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Languages</th>
+                          <th style={{ padding: 12, textAlign: 'center' }}>Tech</th>
                           <th style={{ padding: 12, textAlign: 'center' }}>Overall Avg</th>
                           <th style={{ padding: 12, textAlign: 'center' }}>Attendance</th>
+                          <th style={{ padding: 12, textAlign: 'center', width: 60 }}>Profile</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3188,8 +2973,22 @@ export default function TeacherDashboard({ profile }) {
                                 #{rank} {isTop ? '🌟' : isBottom ? '⚠️' : ''}
                               </td>
                               <td style={{ padding: 12, textAlign: 'left', fontWeight: 500 }}>{student.studentName || student.fullName || 'Unknown Student'}</td>
+                              <td style={{ padding: 12, textAlign: 'center', fontSize: 13, color: '#475569' }}>{student.contactNo || student.contactNumber || 'N/A'}</td>
+                              <td style={{ padding: 12, textAlign: 'center', fontSize: 13, color: '#475569' }}>{student.schoolName || 'N/A'}</td>
+                              <td style={{ padding: 12, textAlign: 'center', fontSize: 13, color: '#475569' }}>{student.dispersalTime || 'N/A'}</td>
+                              <td style={{ padding: 12, textAlign: 'center', fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                                {(student.languages || []).filter(l => l !== 'English').map(l => l.charAt(0)).join('/') || 'N/A'}
+                              </td>
+                              <td style={{ padding: 12, textAlign: 'center', fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                                {(student.technologies || []).join(', ') || 'N/A'}
+                              </td>
                               <td style={{ padding: 12, textAlign: 'center' }}>{student.sMark || 0}%</td>
                               <td style={{ padding: 12, textAlign: 'center' }}>{student.sAtt || 0}%</td>
+                              <td style={{ padding: 12, textAlign: 'center' }}>
+                                <button className="btn btn-ghost btn-sm" onClick={() => { setActiveWidgetModal(null); navigate('/students', { state: { studentId: student.id } }); }} style={{ padding: 6, borderRadius: '50%' }} title="View Profile">
+                                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>account_circle</span>
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -3770,97 +3569,6 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {activeTab === 'tasks' && (
-        <div className="portal-card" style={{ padding: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined">arrow_back</span>
-            </button>
-            <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Manager-Assigned Tasks</h2>
-          </div>
-
-          <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 18, color: 'var(--brand-primary)', marginBottom: 16 }}>Current Week Checklist</h3>
-            <div style={{ background: 'var(--surface-bg)', padding: 24, borderRadius: 16, border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-              {profile?.currentWeeklyTargets?.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: '500' }}>
-                    <span>Overall Progress</span>
-                    <strong style={{ color: 'var(--status-success)' }}>
-                      {profile.currentWeeklyTargets.filter(t => t.completed).length}/{profile.currentWeeklyTargets.length} Completed
-                    </strong>
-                  </div>
-                  <div style={{ width: '100%', height: 8, background: 'var(--surface-border)', borderRadius: 4, overflow: 'hidden' }}>
-                     <div style={{ 
-                       width: `${(profile.currentWeeklyTargets.filter(t => t.completed).length / profile.currentWeeklyTargets.length) * 100}%`, 
-                       height: '100%', 
-                       background: 'var(--status-success)', 
-                       borderRadius: 4,
-                       transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-                     }}></div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {!profile?.currentWeeklyTargets || profile.currentWeeklyTargets.length === 0 ? (
-                  <div style={{ padding: 16, background: 'rgba(0,0,0,0.02)', borderRadius: 12, textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No tasks assigned for the current week.
-                  </div>
-                ) : (
-                  profile.currentWeeklyTargets.map((target, idx) => (
-                    <label key={target.id || idx} style={{ 
-                      display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 16px', 
-                      background: target.completed ? 'rgba(52,211,153,0.05)' : '#ffffff', 
-                      borderRadius: 12, 
-                      border: `1px solid ${target.completed ? 'rgba(52,211,153,0.3)' : 'var(--surface-border)'}`, 
-                      cursor: 'pointer', transition: 'all 0.2s',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-                    }}>
-                      <input 
-                        type="checkbox" 
-                        style={{ marginTop: 4, width: 18, height: 18, accentColor: 'var(--status-success)', cursor: 'pointer' }}
-                        checked={target.completed}
-                        onChange={() => toggleWeeklyTarget(idx)}
-                      />
-                      <span style={{ fontSize: 15, color: target.completed ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: target.completed ? 'line-through' : 'none', lineHeight: 1.4, transition: 'all 0.2s' }}>
-                        {target.title}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h3 style={{ fontSize: 18, color: 'var(--text-primary)', marginBottom: 16 }}>Historical Task Logs</h3>
-            {(!profile?.managerFeedbacks || profile.managerFeedbacks.length === 0) ? (
-              <div className="empty-state">No historical task logs available yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {[...profile.managerFeedbacks].reverse().map((fb, idx) => (
-                  <div key={idx} style={{ padding: 24, borderRadius: 12, background: '#f5f5f5', border: '1px solid #e0e0e0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, borderBottom: '1px solid #e0e0e0', paddingBottom: 12 }}>
-                      <strong style={{ fontSize: 15, color: 'var(--text-primary)' }}>Week of {new Date(fb.date).toLocaleDateString()}</strong>
-                      <span className="badge badge-service-manager">{fb.managerId || 'Service Manager'}</span>
-                    </div>
-                    {(!fb.targets || fb.targets.length === 0) ? (
-                      <p style={{ margin: 0, fontStyle: 'italic', color: 'var(--text-secondary)' }}>No specific tasks assigned this week.</p>
-                    ) : (
-                      <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {fb.targets.map((t, i) => (
-                          <li key={i}>{t}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {activeTab === 'materials' && (
         <div className="responsive-grid-1-2" style={{ gap: 24 }}>
