@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
@@ -171,6 +171,60 @@ export default function ServiceManagerDashboard() {
   const published = testWorkflows.filter(t => t.status === 'final_published');
   const graded = testWorkflows.filter(t => t.status === 'graded');
 
+  const handleResolvePTM = async (studentId, createdAt, teacherId) => {
+    try {
+      const studentRef = doc(db, 'students', studentId);
+      const sSnap = await getDoc(studentRef);
+      if (!sSnap.exists()) return;
+      const sData = sSnap.data();
+      const updatedNotices = (sData.ptmNotices || []).map(p => {
+        if (p.createdAt === createdAt && p.teacherId === teacherId) {
+          return { ...p, status: 'resolved' };
+        }
+        return p;
+      });
+      await updateDoc(studentRef, { ptmNotices: updatedNotices });
+    } catch (err) {
+      alert("Error resolving PTM: " + err.message);
+    }
+  };
+
+  const flaggedStudents = students.filter(s => s.redFlag === true);
+
+  const escalatedPTMs = [];
+  students.forEach(s => {
+    if (s.ptmNotices && Array.isArray(s.ptmNotices)) {
+      s.ptmNotices.forEach(ptm => {
+        if (ptm.requiresManager && ptm.status === 'pending') {
+          escalatedPTMs.push({ ...ptm, studentName: s.studentName || s.fullName, studentId: s.id, batch: s.batch });
+        }
+      });
+    }
+  });
+  escalatedPTMs.sort((a,b) => new Date(a.dateScheduled) - new Date(b.dateScheduled));
+
+  // Chart Data: Teacher Performance Trend
+  const allPerformanceSnapshots = [];
+  teachers.forEach(t => {
+    if (t.performanceHistory) {
+      t.performanceHistory.forEach(ph => {
+        const d = new Date(ph.date);
+        const dateStr = `${d.getDate()}/${d.getMonth()+1}`; 
+        allPerformanceSnapshots.push({ sortDate: d.getTime(), date: dateStr, score: ph.score });
+      });
+    }
+  });
+  const groupedPerformance = allPerformanceSnapshots.reduce((acc, curr) => {
+    if (!acc[curr.date]) acc[curr.date] = { date: curr.date, sortDate: curr.sortDate, total: 0, count: 0 };
+    acc[curr.date].total += curr.score;
+    acc[curr.date].count += 1;
+    return acc;
+  }, {});
+  const performanceTrendData = Object.values(groupedPerformance)
+    .map(g => ({ date: g.date, avgScore: Math.round(g.total / g.count), sortDate: g.sortDate }))
+    .sort((a,b) => a.sortDate - b.sortDate)
+    .slice(-10);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
       <div className="page-header">
@@ -223,6 +277,64 @@ export default function ServiceManagerDashboard() {
         </div>
       </div>
 
+      {/* Retention Risk Queue (Red Flags) */}
+      {flaggedStudents.length > 0 && (
+        <div style={{ background: '#fff1f2', border: '1px solid #fda4af', padding: '16px', borderRadius: '8px' }}>
+          <h3 style={{ color: '#be123c', margin: '0 0 12px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>flag</span>
+            Retention Risk Queue (Red Flagged by Teachers)
+          </h3>
+          <div className="grid-auto-300" style={{ gap: '8px' }}>
+            {flaggedStudents.map(student => (
+              <div key={student.id} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '13px', color: '#be123c' }}>{student.studentName || student.fullName} ({student.batch})</strong>
+                  <span className="badge" style={{ fontSize: 11, background: '#ffe4e6', color: '#be123c' }}>Flagged</span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#666' }}>Phone: {student.contactNo || student.phone || 'N/A'}</span>
+                <span style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', background: '#f8fafc', padding: '4px 8px', borderRadius: '4px' }}>
+                  Reason: {student.redFlagReason || 'No reason provided'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled PTM Escalations */}
+      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px' }}>
+        <h3 style={{ color: '#d97706', margin: '0 0 12px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>groups</span>
+          Scheduled PTM Escalations (Manager Presence Required)
+        </h3>
+        {escalatedPTMs.length === 0 ? (
+          <div style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px dashed #fcd34d', color: '#92400e', fontSize: '13px' }}>
+            No pending PTM escalations requiring manager presence at this time.
+          </div>
+        ) : (
+          <div className="grid-auto-300" style={{ gap: '8px' }}>
+            {escalatedPTMs.map((ptm, idx) => (
+              <div key={idx} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fde68a', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '13px', color: '#d97706' }}>{ptm.studentName} ({ptm.batch})</strong>
+                  <span className="badge" style={{ fontSize: 11, background: '#fef3c7', color: '#d97706' }}>{new Date(ptm.dateScheduled).toLocaleString()}</span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#666' }}>Teacher: {ptm.teacherName}</span>
+                <span style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', background: '#f8fafc', padding: '4px 8px', borderRadius: '4px' }}>
+                  Reason: {ptm.reason}
+                </span>
+                <button 
+                  onClick={() => handleResolvePTM(ptm.studentId, ptm.createdAt, ptm.teacherId)}
+                  className="btn btn-sm" 
+                  style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '4px', alignSelf: 'flex-start', marginTop: '4px', fontSize: '12px', cursor: 'pointer' }}>
+                  Mark Resolved
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ZONE 2: Analytics Charts */}
       <div className="grid-2" style={{ gap: '24px' }}>
         <div className="portal-card" style={{ padding: '24px' }}>
@@ -238,6 +350,24 @@ export default function ServiceManagerDashboard() {
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#888' }} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                 <Line type="monotone" dataKey="rate" name="Attendance %" stroke="var(--brand-primary)" strokeWidth={3} dot={{ r: 4, fill: 'var(--brand-primary)', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="portal-card" style={{ padding: '24px' }}>
+          <h2 style={{ fontSize: 18, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>trending_up</span>
+            Global Teacher Performance
+          </h2>
+          <div style={{ height: 250, width: '100%' }}>
+            <ResponsiveContainer>
+              <LineChart data={performanceTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#888' }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#888' }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                <Line type="monotone" dataKey="avgScore" name="Avg Score" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

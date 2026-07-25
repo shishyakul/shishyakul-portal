@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function TabPerformance({ student, allFeedbacks = [] }) {
   const [exams, setExams] = useState([]);
+  const [schoolExams, setSchoolExams] = useState([]);
   const [selfStudyLogs, setSelfStudyLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editSchoolModal, setEditSchoolModal] = useState({ isOpen: false, selectedExamId: '', marksData: {} });
+  const [savingMarks, setSavingMarks] = useState(false);
+  const { profile } = useAuth();
+  const isServiceManager = profile?.role === 'service_manager';
 
   useEffect(() => {
     async function fetchPerformance() {
@@ -39,6 +45,16 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
         // Sort by date descending
         fetchedExams.sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
         setExams(fetchedExams);
+
+        // Fetch School Exams
+        const qSchool = query(collection(db, 'school_test_marks'), where('studentId', '==', student.id));
+        const snapSchool = await getDocs(qSchool);
+        const fetchedSchoolExams = [];
+        snapSchool.forEach(doc => {
+          fetchedSchoolExams.push({ id: doc.id, ...doc.data() });
+        });
+        fetchedSchoolExams.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setSchoolExams(fetchedSchoolExams);
 
         // Fetch Self-Study Logs from Attendance
         const qAtt = query(collection(db, 'attendance'), where('batch', '==', student.batch), where('sessionType', '==', 'Self-Study'));
@@ -75,9 +91,6 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
             <span className="material-symbols-outlined">psychology</span>
             Performance & Achievements
           </h3>
-          <button className="btn-ghost btn-sm" disabled style={{ opacity: 0.5 }}>
-            + Add Score
-          </button>
         </div>
 
         {loading ? (
@@ -125,6 +138,92 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
             </tbody>
           </table>
         )}
+
+        {/* Official School Exam Records */}
+        <div className="sd-section" style={{ marginTop: '24px', background: 'var(--surface-bg)', padding: '20px', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>history_edu</span>
+            Official School Exam Records
+          </h3>
+          {schoolExams.length === 0 ? (
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: 14 }}>No school exam records found.</p>
+          ) : (
+            <div className="table-responsive">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Exam Type</th>
+                    <th>Subjects & Marks</th>
+                    <th>Overall %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schoolExams.map(exam => {
+                    const subjects = Object.keys(exam.marks || {});
+                    let validSubjectsCount = 0;
+                    let totalMarksObtained = 0;
+                    
+                    subjects.forEach(sub => {
+                      const mk = exam.marks[sub];
+                      if (mk !== null && mk !== undefined && mk !== '') {
+                        validSubjectsCount++;
+                        totalMarksObtained += Number(mk);
+                      }
+                    });
+                    
+                    const grandTotal = exam.maxMarks * validSubjectsCount;
+                    const overallPercentage = grandTotal > 0 ? ((totalMarksObtained / grandTotal) * 100).toFixed(1) : 0;
+                    
+                    return (
+                      <tr key={exam.id}>
+                        <td>{new Date(exam.createdAt).toLocaleDateString()}</td>
+                        <td style={{ fontWeight: '600', color: '#8b5cf6' }}>{exam.testType}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {subjects.map(sub => {
+                              const mk = exam.marks[sub];
+                              const isValid = mk !== null && mk !== undefined && mk !== '';
+                              const pct = isValid && exam.maxMarks > 0 ? (mk / exam.maxMarks) * 100 : 0;
+                              return (
+                                <span key={sub} style={{ fontSize: 12, background: '#f8fafc', padding: '4px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                                  {sub}: {isValid ? <strong style={{ color: pct >= 80 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444' }}>{mk}</strong> : <strong style={{ color: '#94a3b8' }}>NA</strong>}/{exam.maxMarks}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontWeight: 'bold', color: overallPercentage >= 80 ? '#10b981' : overallPercentage >= 40 ? '#f59e0b' : '#ef4444' }}>
+                              {overallPercentage}%
+                            </span>
+                            {isServiceManager && (
+                              <button 
+                                className="btn-ghost btn-sm" 
+                                onClick={() => {
+                                  const initialMarks = {};
+                                  Object.keys(exam.marks || {}).forEach(sub => {
+                                    initialMarks[sub] = exam.marks[sub] !== null ? exam.marks[sub] : '';
+                                  });
+                                  setEditSchoolModal({ isOpen: true, selectedExamId: exam.id, marksData: initialMarks });
+                                }}
+                                style={{ padding: '4px', display: 'flex', alignItems: 'center' }}
+                                title="Edit Marks"
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>edit</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         
         {/* Feedbacks Section */}
         <div className="sd-section" style={{ marginTop: '24px', background: 'var(--surface-bg)', padding: '20px', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
@@ -230,6 +329,117 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
           )}
         </div>
       </div>
+      
+      {/* Edit School Exam Modal */}
+      {editSchoolModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setEditSchoolModal({ isOpen: false, selectedExamId: '', marksData: {} })}>
+          <div className="modal-box" style={{ maxWidth: '500px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 className="modal-title">Edit School Exam Marks</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditSchoolModal({ isOpen: false, selectedExamId: '', marksData: {} })}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label className="form-label" style={{ margin: 0 }}>Select Exam to Edit</label>
+                <select 
+                  className="input-field"
+                  value={editSchoolModal.selectedExamId}
+                  onChange={(e) => {
+                    const exId = e.target.value;
+                    if (!exId) {
+                      setEditSchoolModal(prev => ({ ...prev, selectedExamId: '', marksData: {} }));
+                      return;
+                    }
+                    const exam = schoolExams.find(x => x.id === exId);
+                    const initialMarks = {};
+                    if (exam) {
+                      Object.keys(exam.marks || {}).forEach(sub => {
+                        initialMarks[sub] = exam.marks[sub] !== null ? exam.marks[sub] : '';
+                      });
+                    }
+                    setEditSchoolModal(prev => ({ ...prev, selectedExamId: exId, marksData: initialMarks }));
+                  }}
+                >
+                  <option value="">-- Select Exam --</option>
+                  {schoolExams.map(ex => (
+                    <option key={ex.id} value={ex.id}>{ex.testType} ({new Date(ex.createdAt).toLocaleDateString()})</option>
+                  ))}
+                </select>
+              </div>
+
+              {editSchoolModal.selectedExamId && (
+                <div style={{ background: 'var(--surface-bg)', padding: '16px', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
+                  <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>Update Subjects (Leave blank for NA)</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {Object.keys(editSchoolModal.marksData).map(sub => {
+                      const activeExam = schoolExams.find(x => x.id === editSchoolModal.selectedExamId);
+                      const max = activeExam ? activeExam.maxMarks : 100;
+                      return (
+                        <div key={sub} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 500, fontSize: '14px' }}>{sub}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input 
+                              type="number" 
+                              className="input-field" 
+                              style={{ width: '80px', padding: '6px 12px' }}
+                              placeholder="NA"
+                              value={editSchoolModal.marksData[sub]}
+                              onChange={(e) => setEditSchoolModal(prev => ({
+                                ...prev,
+                                marksData: { ...prev.marksData, [sub]: e.target.value }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>/ {max}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button className="btn btn-ghost" onClick={() => setEditSchoolModal({ isOpen: false, selectedExamId: '', marksData: {} })}>Cancel</button>
+              <button 
+                className="btn btn-brand"
+                disabled={!editSchoolModal.selectedExamId || savingMarks}
+                onClick={async () => {
+                  setSavingMarks(true);
+                  try {
+                    const finalMarks = {};
+                    Object.keys(editSchoolModal.marksData).forEach(sub => {
+                      const val = editSchoolModal.marksData[sub];
+                      finalMarks[sub] = (val === '' || val === undefined) ? null : Number(val);
+                    });
+                    await updateDoc(doc(db, 'school_test_marks', editSchoolModal.selectedExamId), {
+                      marks: finalMarks
+                    });
+                    
+                    // Update local state to reflect instantly
+                    setSchoolExams(prev => prev.map(ex => {
+                      if (ex.id === editSchoolModal.selectedExamId) {
+                        return { ...ex, marks: finalMarks };
+                      }
+                      return ex;
+                    }));
+                    
+                    setEditSchoolModal({ isOpen: false, selectedExamId: '', marksData: {} });
+                  } catch (e) {
+                    console.error("Error updating marks", e);
+                    alert("Failed to update marks");
+                  }
+                  setSavingMarks(false);
+                }}
+              >
+                {savingMarks ? 'Saving...' : 'Save Marks'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

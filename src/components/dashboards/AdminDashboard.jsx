@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import NotificationBell from '../NotificationBell';
@@ -128,8 +128,39 @@ export default function AdminDashboard({ profile }) {
       absentSessions
     };
   }).sort((a, b) => a.percentage - b.percentage); // Lowest attendance first (Truancy risk)
-  
   const truancyList = studentAttendanceStats.slice(0, 5);
+
+  // Flagged Students
+  const flaggedStudents = students.filter(s => s.redFlag === true);
+
+  const handleResolvePTM = async (studentId, createdAt, teacherId) => {
+    try {
+      const studentRef = doc(db, 'students', studentId);
+      const sSnap = await getDoc(studentRef);
+      if (!sSnap.exists()) return;
+      const sData = sSnap.data();
+      const updatedNotices = (sData.ptmNotices || []).map(p => {
+        if (p.createdAt === createdAt && p.teacherId === teacherId) {
+          return { ...p, status: 'resolved' };
+        }
+        return p;
+      });
+      await updateDoc(studentRef, { ptmNotices: updatedNotices });
+    } catch (err) {
+      alert("Error resolving PTM: " + err.message);
+    }
+  };
+
+  const escalatedPTMs = [];
+  students.forEach(s => {
+    if (s.ptmNotices && Array.isArray(s.ptmNotices)) {
+      s.ptmNotices.forEach(ptm => {
+        if (ptm.requiresManager && ptm.status === 'pending') {
+          escalatedPTMs.push({ ...ptm, studentName: s.studentName || s.fullName, studentId: s.id, batch: s.batch });
+        }
+      });
+    }
+  });
 
   // Chart Data
   const revenueData = [
@@ -161,21 +192,71 @@ export default function AdminDashboard({ profile }) {
     return null;
   };
 
+  const [syncingPayroll, setSyncingPayroll] = useState(false);
+  const handleSyncPayroll = async () => {
+    setSyncingPayroll(true);
+    try {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      const teachers = users.filter(u => u.role === 'teacher' || u.role === 'faculty');
+      
+      const attSnap = await getDocs(collection(db, 'teacher_attendance'));
+      const attData = attSnap.docs.map(d => d.data());
+      
+      const payrollData = teachers.map(teacher => {
+        const teacherAtt = attData.filter(a => a.userId === teacher.id && a.date?.startsWith(currentMonth));
+        const daysPresent = teacherAtt.filter(a => a.status === 'Present').length;
+        
+        const teacherLectures = lectureReports.filter(l => l.teacherId === teacher.id);
+        const lecturesDeliveredThisMonth = teacherLectures.filter(l => {
+            const dateStr = l.date || (l.timestamp && new Date(l.timestamp.seconds * 1000).toISOString().split('T')[0]);
+            return dateStr?.startsWith(currentMonth);
+        }).length;
+        
+        return {
+          teacherId: teacher.id,
+          teacherName: teacher.fullName,
+          month: currentMonth,
+          daysPresent,
+          lecturesDelivered: lecturesDeliveredThisMonth,
+          syncedAt: new Date().toISOString()
+        };
+      });
+
+      for (const record of payrollData) {
+        await setDoc(doc(db, 'core_payroll_timesheets', `${record.teacherId}_${currentMonth}`), record);
+      }
+      
+      alert(`Successfully bridged payroll timesheets for ${payrollData.length} teachers to shishyakul-core!`);
+    } catch (err) {
+      alert("Payroll Sync Error: " + err.message);
+    } finally {
+      setSyncingPayroll(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
       <div className="page-header">
-        <div>
-          <h1 className="page-title">
-            {greeting},{' '}
-            <span className="gradient-text">
-              {profile?.fullName?.split(' ')[0] ?? 'Admin'}
-            </span>{' '}
-            👋
-          </h1>
-          <p className="page-subtitle">
-            Shishyakul Global Branch Analytics & Overview.
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div>
+            <h1 className="page-title">
+              {greeting},{' '}
+              <span className="gradient-text">
+                {profile?.fullName?.split(' ')[0] ?? 'Admin'}
+              </span>{' '}
+              👋
+            </h1>
+            <p className="page-subtitle">
+              Shishyakul Global Branch Analytics & Overview.
+            </p>
+          </div>
+          <button className="btn btn-primary" onClick={handleSyncPayroll} disabled={syncingPayroll} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="material-symbols-outlined">{syncingPayroll ? 'sync' : 'account_balance'}</span>
+            {syncingPayroll ? 'Syncing...' : 'Sync Payroll to Core'}
+          </button>
         </div>
       </div>
 
@@ -195,6 +276,64 @@ export default function AdminDashboard({ profile }) {
                 </div>
                 <span className="badge badge-admin" style={{ fontSize: 11, background: '#fee2e2', color: '#dc2626' }}>
                   Absent since {student.lastAbsentDate}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled PTM Escalations */}
+      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+        <h3 style={{ color: '#d97706', margin: '0 0 12px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>groups</span>
+          Scheduled PTM Escalations (Manager Presence Required)
+        </h3>
+        {escalatedPTMs.length === 0 ? (
+          <div style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px dashed #fcd34d', color: '#92400e', fontSize: '13px' }}>
+            No pending PTM escalations requiring manager presence at this time.
+          </div>
+        ) : (
+          <div className="grid-auto-300" style={{ gap: '8px' }}>
+            {escalatedPTMs.map((ptm, idx) => (
+              <div key={idx} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fde68a', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '13px', color: '#d97706' }}>{ptm.studentName} ({ptm.batch})</strong>
+                  <span className="badge" style={{ fontSize: 11, background: '#fef3c7', color: '#d97706' }}>{new Date(ptm.dateScheduled).toLocaleString()}</span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#666' }}>Teacher: {ptm.teacherName}</span>
+                <span style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', background: '#f8fafc', padding: '4px 8px', borderRadius: '4px' }}>
+                  Reason: {ptm.reason}
+                </span>
+                <button 
+                  onClick={() => handleResolvePTM(ptm.studentId, ptm.createdAt, ptm.teacherId)}
+                  className="btn btn-sm" 
+                  style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '4px', alignSelf: 'flex-start', marginTop: '4px', fontSize: '12px', cursor: 'pointer' }}>
+                  Mark Resolved
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Retention Risk Queue (Red Flags) */}
+      {flaggedStudents.length > 0 && (
+        <div style={{ background: '#fff1f2', border: '1px solid #fda4af', padding: '16px', borderRadius: '8px', marginBottom: 28 }}>
+          <h3 style={{ color: '#be123c', margin: '0 0 12px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>flag</span>
+            Retention Risk Queue (Red Flagged by Teachers)
+          </h3>
+          <div className="grid-auto-300" style={{ gap: '8px' }}>
+            {flaggedStudents.map(student => (
+              <div key={student.id} style={{ background: '#fff', padding: '12px', borderRadius: '6px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong style={{ fontSize: '13px', color: '#be123c' }}>{student.studentName || student.fullName} ({student.batch})</strong>
+                  <span className="badge" style={{ fontSize: 11, background: '#ffe4e6', color: '#be123c' }}>Flagged</span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#666' }}>Phone: {student.contactNo || student.phone || 'N/A'}</span>
+                <span style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', background: '#f8fafc', padding: '4px 8px', borderRadius: '4px' }}>
+                  Reason: {student.redFlagReason || 'No reason provided'}
                 </span>
               </div>
             ))}

@@ -327,37 +327,175 @@ export default function StudentDashboard({ profile }) {
 
   return (
     <div className="dashboard student-dashboard">
-      <div className="dashboard-header">
-        <h1>Student Portal</h1>
-        <p>Welcome back, {profile?.fullName ?? 'Student'} • {batchName || 'No Batch Assigned'}</p>
-      </div>
+      {activeTab !== 'feed' && (
+        <div className="dashboard-header">
+          <h1>Student Portal</h1>
+          <p>Welcome back, {profile?.fullName ?? 'Student'} • {batchName || 'No Batch Assigned'}</p>
+        </div>
+      )}
 
 
       {!batchName && !isAlumniOnly ? (
         <div className="empty-state">Your batch has not been assigned yet. Please contact administration.</div>
       ) : (
         <>
-          {activeTab === 'feed' && (
-            <div className="portal-card">
-              <h2><span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: 8 }}>dynamic_feed</span>Academic Feed</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginTop: 20 }}>
-                {materials.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No materials posted for your batch yet.</p> : materials.map(mat => (
-                  <div key={mat.id} style={{ padding: 20, background: 'var(--surface-bg)', borderRadius: 12, border: '1px solid var(--surface-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 18 }}>{mat.title}</h3>
-                      <span className={`badge ${mat.type === 'Assignment' ? 'badge-admin' : 'badge-service-manager'}`}>{mat.type}</span>
+          {activeTab === 'feed' && (() => {
+            const totalClasses = attendance.length;
+            const totalPresent = attendance.filter(a => a.status === 'Present').length;
+            const attPercent = totalClasses ? Math.round((totalPresent/totalClasses)*100) : 100;
+            
+            const latestTest = recentTests.length > 0 ? recentTests[0] : allTests[allTests.length - 1];
+            const latestTestScore = latestTest ? latestTest.marks : 'N/A';
+
+            let myData = null;
+            let mySlot = null;
+            for (const slot of Object.keys(timetable)) {
+              for (const room of Object.keys(timetable[slot] || {})) {
+                if (timetable[slot][room]?.batch === batchName) {
+                  mySlot = slot; myData = timetable[slot][room]; break;
+                }
+              }
+              if (myData) break;
+            }
+
+            const daysOfWeekFull = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+            const todayDayStr = daysOfWeekFull[new Date().getDay()];
+            let todayClass = null;
+            if (myData) {
+              if (['MONDAY','TUESDAY','WEDNESDAY'].includes(todayDayStr)) todayClass = myData.monWed;
+              else if (['THURSDAY','FRIDAY','SATURDAY'].includes(todayDayStr)) todayClass = myData.thursSat;
+              else if (todayDayStr === 'SUNDAY') todayClass = myData.extra;
+            }
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                
+                {/* 1. Hero Banner */}
+                <div style={{ background: 'linear-gradient(135deg, var(--brand-primary), #d97706)', padding: '32px', borderRadius: '16px', color: '#fff', boxShadow: '0 8px 24px rgba(217, 119, 6, 0.2)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-20%', right: '-5%', width: '250px', height: '250px', background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%)', borderRadius: '50%' }}></div>
+                  <h2 style={{ fontSize: '28px', marginBottom: '8px', fontWeight: 800, position: 'relative', zIndex: 1 }}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {profile?.fullName?.split(' ')[0] || 'Student'} 👋</h2>
+                  <p style={{ fontSize: '15px', opacity: 0.9, marginBottom: '24px', position: 'relative', zIndex: 1 }}>Here's what's happening in your batch today.</p>
+                  
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+                    <div style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="material-symbols-outlined">group</span>
+                      <strong style={{ fontSize: '15px' }}>{batchName}</strong>
                     </div>
-                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>Posted by {mat.teacherName}</p>
-                    {mat.description && <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 16 }}>{mat.description}</p>}
-                    
-                    <a href={mat.driveLink} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'inline-flex', color: 'var(--brand-primary)' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>open_in_new</span> Open Material
-                    </a>
+                    <div style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="material-symbols-outlined">check_circle</span>
+                      <strong style={{ fontSize: '15px' }}>{attPercent}% Attendance</strong>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="material-symbols-outlined">analytics</span>
+                      <strong style={{ fontSize: '15px' }}>Latest Score: {latestTestScore}{latestTestScore !== 'N/A' && '%'}</strong>
+                    </div>
                   </div>
-                ))}
+                </div>
+
+                {/* 2. Action Center */}
+                {(pendingPtms.length > 0 || allFeedbacks.length > 0) && (
+                  <div>
+                    <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--text-secondary)' }}>Action Center</h3>
+                    <div className="grid-auto-300" style={{ gap: '16px' }}>
+                      {pendingPtms.map((ptm, i) => (
+                        <div key={`ptm-${i}`} style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '12px', display: 'flex', gap: '12px' }}>
+                          <span className="material-symbols-outlined" style={{ color: '#d97706', fontSize: '24px' }}>warning</span>
+                          <div>
+                            <strong style={{ display: 'block', color: '#b45309', marginBottom: '4px' }}>PTM Scheduled</strong>
+                            <p style={{ fontSize: '13px', color: '#d97706', margin: 0 }}>{ptm.teacherName} has scheduled a PTM on {new Date(ptm.dateScheduled).toLocaleString()}. Reason: {ptm.reason}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {allFeedbacks.slice(-2).reverse().map((fb, i) => (
+                        <div key={`fb-${i}`} style={{ background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '16px', borderRadius: '12px', display: 'flex', gap: '12px' }}>
+                          <span className="material-symbols-outlined" style={{ color: '#0f766e', fontSize: '24px' }}>campaign</span>
+                          <div>
+                            <strong style={{ display: 'block', color: '#115e59', marginBottom: '4px' }}>New Feedback from {fb.teacherName || 'Teacher'}</strong>
+                            <p style={{ fontSize: '13px', color: '#0f766e', margin: 0 }}>"{fb.feedback}"</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Today at a Glance */}
+                <div className="grid-2" style={{ gap: '24px' }}>
+                  <div className="portal-card">
+                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>today</span>
+                      Today's Class ({todayDayStr})
+                    </h3>
+                    {todayClass && todayClass.subject ? (
+                      <div style={{ background: 'var(--surface-bg)', padding: '20px', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                          <div>
+                            <span className="badge badge-admin">{mySlot}</span>
+                            <h4 style={{ fontSize: '20px', marginTop: '12px', color: 'var(--text-primary)' }}>{todayClass.subject}</h4>
+                          </div>
+                          <span className="material-symbols-outlined" style={{ fontSize: '32px', color: 'var(--text-muted)' }}>school</span>
+                        </div>
+                        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person</span>
+                          {activeTeachers.find(t => t.id === todayClass.teacherId)?.fullName || 'Faculty'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="empty-state" style={{ padding: '32px 0' }}>
+                        No classes scheduled for today. Enjoy your self-study!
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="portal-card">
+                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>history_edu</span>
+                      Recently Taught
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {lectureReports.length === 0 ? (
+                        <p style={{ color: 'var(--text-muted)' }}>No recent lectures recorded.</p>
+                      ) : lectureReports.slice(0, 3).map(lr => (
+                        <div key={lr.id} style={{ padding: '12px', background: 'var(--surface-bg)', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <strong style={{ fontSize: '14px' }}>{lr.topicTaught}</strong>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lr.date || (lr.timestamp ? new Date(lr.timestamp.seconds * 1000).toLocaleDateString() : '')}</span>
+                          </div>
+                          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>By {lr.teacherName}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Academic Resource Feed */}
+                <div>
+                  <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                    <span className="material-symbols-outlined" style={{ color: '#10b981' }}>menu_book</span>
+                    Latest Resources
+                  </h3>
+                  <div className="grid-auto-300" style={{ gap: '20px' }}>
+                    {materials.length === 0 ? <div className="empty-state" style={{ gridColumn: '1 / -1' }}>No materials posted for your batch yet.</div> : materials.map(mat => (
+                      <div key={mat.id} style={{ padding: 20, background: '#fff', borderRadius: 12, border: '1px solid var(--surface-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <h4 style={{ fontSize: 16, margin: 0 }}>{mat.title}</h4>
+                          <span className={`badge ${mat.type === 'Assignment' ? 'badge-admin' : 'badge-service-manager'}`}>{mat.type}</span>
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, flex: 1 }}>{mat.description || 'No description provided.'}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{mat.teacherName}</span>
+                          <a href={mat.driveLink} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ padding: '6px 12px', color: 'var(--brand-primary)', background: 'var(--brand-primary-light)' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>open_in_new</span> View
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'submit' && (
             <div className="grid-1-2">
