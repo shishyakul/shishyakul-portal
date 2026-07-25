@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, setDoc, arrayUnion, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, setDoc, arrayUnion, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -82,6 +82,7 @@ function StudentFeedbackModal({ student, teacherName, teacherId, onClose }) {
 function SchedulePTMModal({ student, teacherName, teacherId, onClose }) {
   const [dateScheduled, setDateScheduled] = useState('');
   const [reason, setReason] = useState('');
+  const [requiresManager, setRequiresManager] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -93,6 +94,7 @@ function SchedulePTMModal({ student, teacherName, teacherId, onClose }) {
         teacherId,
         teacherName,
         reason,
+        requiresManager,
         status: 'pending',
         createdAt: new Date().toISOString()
       };
@@ -122,6 +124,11 @@ function SchedulePTMModal({ student, teacherName, teacherId, onClose }) {
         <div className="form-group">
           <label className="form-label">Reason for Meeting</label>
           <textarea className="portal-input" style={{ minHeight: 80 }} placeholder="Why is this PTM being scheduled? (Strict Notice)" value={reason} onChange={e => setReason(e.target.value)} />
+        </div>
+
+        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input type="checkbox" id="requiresManager" checked={requiresManager} onChange={e => setRequiresManager(e.target.checked)} style={{ cursor: 'pointer' }} />
+          <label htmlFor="requiresManager" style={{ fontSize: '14px', cursor: 'pointer', color: '#be123c', fontWeight: '500' }}>Escalate: Requires Manager Presence</label>
         </div>
 
         <div className="modal-footer" style={{ marginTop: 24 }}>
@@ -323,14 +330,17 @@ export default function TeacherDashboard({ profile }) {
   const [testWorkflows, setTestWorkflows] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
   const [iProfileOpen, setIProfileOpen] = useState(false);
 
   const [gradingModal, setGradingModal] = useState({ isOpen: false, testId: null, batch: '', maxMarks: 0, testDate: '', subject: '', topic: '', batchStudents: [] });
   const [classTestModal, setClassTestModal] = useState({ isOpen: false, step: 1, form: { date: '', time: '', subject: assignedSubjects[0] || SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
   const [marksData, setMarksData] = useState({});
+  const [schoolTestModal, setSchoolTestModal] = useState({ isOpen: false, step: 1, form: { batch: '', testType: '1st Unit Test', maxMarks: '', subjectsStr: '' }, students: [], subjects: [] });
   const [draftModal, setDraftModal] = useState({ isOpen: false, duty: null, link: '', startDate: null });
   const [postLectureModal, setPostLectureModal] = useState({ isOpen: false, classData: null });
   const [taskModal, setTaskModal] = useState({ isOpen: false, title: '', type: 'custom_target', dueDate: '' });
+  const [saving, setSaving] = useState(false);
 
   const [testRecords, setTestRecords] = useState([]);
   const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
@@ -338,7 +348,25 @@ export default function TeacherDashboard({ profile }) {
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
 
   // --- Class Teacher Hub Widget Modals ---
-  const [activeWidgetModal, setActiveWidgetModal] = useState(null);
+  const [activeWidgetModal, setActiveWidgetModal] = useState(null); // 'enrolled', 'attendance', 'performance', 'top', 'attention', 'exams'
+
+  const handleToggleRedFlag = async (student) => {
+    try {
+      if (student.redFlag) {
+        if(window.confirm(`Remove red flag for ${student.studentName || student.fullName}?`)) {
+          await updateDoc(doc(db, 'students', student.id), { redFlag: false, redFlagReason: null });
+        }
+      } else {
+        const reason = window.prompt(`Why are you red-flagging ${student.studentName || student.fullName}?\n(Branch & Service Managers will be notified)`);
+        if (reason !== null) {
+          await updateDoc(doc(db, 'students', student.id), { redFlag: true, redFlagReason: reason });
+        }
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const [expandedTestId, setExpandedTestId] = useState(null);
 
   const [feedbackStudent, setFeedbackStudent] = useState(null);
@@ -511,10 +539,9 @@ export default function TeacherDashboard({ profile }) {
   
   const calculateRealStats = (year, month = null) => {
     let presentDays = 0, absentDays = 0, lateMarks = 0, sundays = 0, holidaysTook = 0;
+    let totalDays = 0;
     
-    const getDaysInYear = (y) => ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
     const getDaysInMonthLocal = (y, m) => new Date(y, m + 1, 0).getDate();
-    let totalDays = month !== null ? getDaysInMonthLocal(year, month) : getDaysInYear(year);
 
     const getSundays = (y, m) => {
       let count = 0;
@@ -524,7 +551,11 @@ export default function TeacherDashboard({ profile }) {
       return count;
     };
 
+    let academicYearStart;
+    const today = new Date();
+    
     if (month !== null) {
+      totalDays = getDaysInMonthLocal(year, month);
       sundays = getSundays(year, month);
       // Holidays took in a specific month
       if (profile?.leaveRequests) {
@@ -536,13 +567,30 @@ export default function TeacherDashboard({ profile }) {
         });
       }
     } else {
-      for(let m = 0; m < 12; m++) sundays += getSundays(year, m);
-      // For yearly holidays, we can use the totalHolidaysUsed calculated elsewhere, but to keep the function pure:
+      // Yearly stats: from April 1st to today (incrementing working day count)
+      if (today.getMonth() < 3) {
+        academicYearStart = new Date(today.getFullYear() - 1, 3, 1);
+      } else {
+        academicYearStart = new Date(today.getFullYear(), 3, 1);
+      }
+      
+      const timeDiff = today.getTime() - academicYearStart.getTime();
+      let daysPassed = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      if (daysPassed < 0) daysPassed = 0;
+      
+      sundays = 0;
+      for (let i = 0; i < daysPassed; i++) {
+        const d = new Date(academicYearStart);
+        d.setDate(d.getDate() + i);
+        if (d.getDay() === 0) sundays++;
+      }
+      totalDays = daysPassed;
+      
       if (profile?.leaveRequests) {
         profile.leaveRequests.forEach(lr => {
            if (lr.status === 'Approved') {
              const d = new Date(lr.startDate || lr.date);
-             if (d.getFullYear() === year) holidaysTook += (Number(lr.days) || 1);
+             if (d >= academicYearStart && d <= today) holidaysTook += (Number(lr.days) || 1);
            }
         });
       }
@@ -550,8 +598,11 @@ export default function TeacherDashboard({ profile }) {
 
     const filteredRecords = teacherAttendanceRecords.filter(r => {
       const d = new Date(r.date);
-      if (d.getFullYear() !== year) return false;
-      if (month !== null && d.getMonth() !== month) return false;
+      if (month !== null) {
+        if (d.getFullYear() !== year || d.getMonth() !== month) return false;
+      } else {
+        if (!academicYearStart || d < academicYearStart || d > today) return false;
+      }
       return true;
     });
 
@@ -577,7 +628,6 @@ export default function TeacherDashboard({ profile }) {
   const [fetchingBatch, setFetchingBatch] = useState(false);
 
   useEffect(() => {
-    const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
     if (activeTab === 'batches' && !selectedBatchTab && classTeacherBatches.length > 0) {
       setSelectedBatchTab(classTeacherBatches[0]);
     }
@@ -1218,6 +1268,34 @@ export default function TeacherDashboard({ profile }) {
                   </div>
                 </div>
               )}
+
+              {/* My Class Teacher Batches */}
+              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>folder_supervised</span>
+                  My Class Teacher Batches
+                </h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px 0' }}>Select a batch you own to view detailed progress logs and test performance.</p>
+                {classTeacherBatches.length === 0 ? (
+                  <div style={{ padding: 16, background: '#f8fafc', borderRadius: 12, textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', fontSize: 14 }}>
+                    You are not assigned as a Class Teacher to any batch yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {classTeacherBatches.map(b => (
+                      <button key={b} onClick={() => handleTabChange('batches')} style={{
+                        padding: '8px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px',
+                        fontSize: 13, fontWeight: '600', color: '#475569', cursor: 'pointer', transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Right Column (Widgets) */}
@@ -1458,59 +1536,6 @@ export default function TeacherDashboard({ profile }) {
                   </div>
                 )}
               </div>
-
-              {/* My Yearly Targets */}
-              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>sports_score</span>
-                  My Yearly Targets
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {!profile?.yearlyTarget ? (
-                    <span style={{ fontSize: 13, color: '#94a3b8' }}>No targets assigned yet.</span>
-                  ) : (
-                    profile.yearlyTarget.split(' | ').filter(Boolean).map((target, idx) => (
-                      <div key={idx} style={{ 
-                        padding: '12px 16px', 
-                        background: '#f8fafc', 
-                        borderRadius: 10, 
-                        fontSize: 14, 
-                        color: '#334155', 
-                        border: '1px solid #f1f5f9', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 12 
-                      }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--brand-primary)' }}>adjust</span>
-                        <span style={{ fontWeight: '500' }}>{target}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Batch Wise Report & Record Keeping */}
-              <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>folder_supervised</span>
-                  Batch Records
-                </h3>
-                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px 0' }}>Select a batch to view detailed progress logs and test performance.</p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {assignedBatches.map(b => (
-                    <button key={b} onClick={() => handleTabChange('batches')} style={{
-                      padding: '8px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px',
-                      fontSize: 13, fontWeight: '600', color: '#475569', cursor: 'pointer', transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                    >
-                      {b}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
@@ -1538,20 +1563,20 @@ export default function TeacherDashboard({ profile }) {
                <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Review test scores & metrics</p>
              </div>
              
-             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('home')}>
+             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('timetable')}>
                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>calendar_today</span>
+                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>calendar_month</span>
                </div>
-               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Today's Schedule</h3>
-               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>View your daily timetable</p>
+               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Weekly Schedule</h3>
+               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>View your weekly timetable</p>
              </div>
              
-             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('target')}>
+             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => navigate('/students')}>
                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>target</span>
+                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>groups</span>
                </div>
-               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Yearly Target Stand</h3>
-               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Monitor overall annual goals</p>
+               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Student Database</h3>
+               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Access student directory & profiles</p>
              </div>
              
              <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('batches')}>
@@ -1568,6 +1593,22 @@ export default function TeacherDashboard({ profile }) {
                </div>
                <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Manager Feedback</h3>
                <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>View weekly performance reviews</p>
+             </div>
+
+             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('materials')}>
+               <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>menu_book</span>
+               </div>
+               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Course Materials</h3>
+               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Manage study resources</p>
+             </div>
+
+             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('grading')}>
+               <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>assignment</span>
+               </div>
+               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Grading & Submissions</h3>
+               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Grade tests & assignments</p>
              </div>
            </div>
         </div>
@@ -1760,13 +1801,36 @@ export default function TeacherDashboard({ profile }) {
                   ))}
                   {Array.from({ length: getDaysInMonth(currentYear, currentMonth) }).map((_, i) => {
                     const day = i + 1;
-                    const isSunday = new Date(currentYear, currentMonth, day).getDay() === 0;
+                    const dayOfWeekStr = new Date(currentYear, currentMonth, day).toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+                    
+                    const isSunday = dayOfWeekStr === 'SUNDAY';
+                    
+                    let isTimetableHoliday = false;
+                    for (const slot of Object.keys(timetable || {})) {
+                      for (const room of Object.keys(timetable[slot] || {})) {
+                        const cell = timetable[slot][room];
+                        if (!cell) continue;
+                        
+                        if (cell.monWed?.subject?.toLowerCase().includes('holiday')) {
+                          const days = mapCycleToDays(cell.monWedLabel, ['MONDAY', 'TUESDAY', 'WEDNESDAY']);
+                          if (days.includes(dayOfWeekStr)) isTimetableHoliday = true;
+                        }
+                        if (cell.thursSat?.subject?.toLowerCase().includes('holiday')) {
+                          const days = mapCycleToDays(cell.thursSatLabel, ['THURSDAY', 'FRIDAY', 'SATURDAY']);
+                          if (days.includes(dayOfWeekStr)) isTimetableHoliday = true;
+                        }
+                        if (cell.extra?.subject?.toLowerCase().includes('holiday')) {
+                          if (dayOfWeekStr === 'SUNDAY') isTimetableHoliday = true;
+                        }
+                      }
+                    }
+
                     let bgColor = 'var(--surface-base)';
                     let color = 'var(--text-primary)';
                     let border = '1px solid var(--surface-border)';
                     let statusTitle = '';
                     
-                    if (isSunday) {
+                    if (isSunday || isTimetableHoliday) {
                       bgColor = 'rgba(59, 130, 246, 0.15)'; // Blue for Holiday
                       color = '#3b82f6';
                       border = '1px solid #3b82f6';
@@ -1774,7 +1838,7 @@ export default function TeacherDashboard({ profile }) {
                     } else if (day % 14 === 3) {
                       bgColor = 'rgba(239, 68, 68, 0.15)'; // Red for Leave
                       color = 'var(--status-error)';
-                      border = '1px solid var(--status-error)';
+                      border = '1px solid #status-error';
                       statusTitle = 'Leave';
                     } else if (day % 7 === 2) {
                       bgColor = 'rgba(249, 115, 22, 0.15)'; // Orange for Late
@@ -2162,35 +2226,7 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {activeTab === 'target' && (
-        <div style={{ padding: '0 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined">arrow_back</span>
-            </button>
-            <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>My Yearly Target Stand</h2>
-          </div>
-          
-          <div className="portal-card" style={{ background: 'linear-gradient(135deg, #fff3e0, #ffe0b2)', border: 'none', padding: 48, textAlign: 'center' }}>
-             <span className="material-symbols-outlined" style={{ fontSize: 64, color: '#e65100', marginBottom: 16 }}>flag_circle</span>
-             <h3 style={{ color: '#e65100', fontSize: 28, margin: '0 0 24px 0' }}>Your Core Objective</h3>
-             
-             {profile?.yearlyTarget ? (
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: 32, borderRadius: 16, border: '1px solid rgba(230,81,0,0.2)', maxWidth: 800, margin: '0 auto', boxShadow: '0 8px 24px rgba(230,81,0,0.1)' }}>
-                 <p style={{ margin: 0, fontSize: 22, color: '#424242', lineHeight: 1.6, fontStyle: 'italic' }}>
-                   "{profile.yearlyTarget}"
-                 </p>
-               </div>
-             ) : (
-               <div style={{ background: 'rgba(255,255,255,0.7)', padding: 32, borderRadius: 16, border: '1px solid rgba(230,81,0,0.2)', maxWidth: 600, margin: '0 auto' }}>
-                 <p style={{ margin: 0, fontSize: 16, color: '#757575' }}>
-                   No specific yearly target has been assigned to you yet. Please check back later or contact your Service Manager.
-                 </p>
-               </div>
-             )}
-          </div>
-        </div>
-      )}
+
       {activeTab === 'performance' && (
         <div style={{ padding: '0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -2419,7 +2455,7 @@ export default function TeacherDashboard({ profile }) {
                   <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', marginBottom: 16 }}>
 
                     {/* Detailed Metrics */}
-                    {(fb.disciplineRating || fb.teachingQualityRating || fb.communicationRating || fb.professionalismRating) && (
+                    {(fb.disciplineRating || fb.teachingQualityRating || fb.communicationRating || fb.professionalismRating || fb.improvementRating) && (
                       <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0', gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
                         {fb.disciplineRating && (
                           <div>
@@ -2450,6 +2486,14 @@ export default function TeacherDashboard({ profile }) {
                             <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Professionalism</span>
                             <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
                               {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.professionalismRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
+                            </div>
+                          </div>
+                        )}
+                        {fb.improvementRating && (
+                          <div>
+                            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 'bold' }}>Improvement</span>
+                            <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+                              {[1,2,3,4,5].map(star => <span key={star} className="material-symbols-outlined" style={{ fontSize: 16, color: star <= fb.improvementRating ? '#fbc02d' : '#e2e8f0' }}>star</span>)}
                             </div>
                           </div>
                         )}
@@ -2491,9 +2535,7 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {activeTab === 'batches' && (() => {
-        const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
-        return (
+      {activeTab === 'batches' && (
         <div style={{ padding: '0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
             <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2959,7 +3001,7 @@ export default function TeacherDashboard({ profile }) {
                           <th style={{ padding: 12, textAlign: 'center' }}>Tech</th>
                           <th style={{ padding: 12, textAlign: 'center' }}>Overall Avg</th>
                           <th style={{ padding: 12, textAlign: 'center' }}>Attendance</th>
-                          <th style={{ padding: 12, textAlign: 'center', width: 60 }}>Profile</th>
+                          <th style={{ padding: 12, textAlign: 'center', width: 100 }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2984,7 +3026,10 @@ export default function TeacherDashboard({ profile }) {
                               </td>
                               <td style={{ padding: 12, textAlign: 'center' }}>{student.sMark || 0}%</td>
                               <td style={{ padding: 12, textAlign: 'center' }}>{student.sAtt || 0}%</td>
-                              <td style={{ padding: 12, textAlign: 'center' }}>
+                              <td style={{ padding: 12, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                <button className="btn btn-ghost btn-sm" onClick={() => handleToggleRedFlag(student)} style={{ padding: 6, borderRadius: '50%', background: student.redFlag ? '#fee2e2' : 'transparent', color: student.redFlag ? '#ef4444' : '#94a3b8' }} title={student.redFlag ? `Flagged: ${student.redFlagReason}` : "Flag Student"}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>flag</span>
+                                </button>
                                 <button className="btn btn-ghost btn-sm" onClick={() => { setActiveWidgetModal(null); navigate('/students', { state: { studentId: student.id } }); }} style={{ padding: 6, borderRadius: '50%' }} title="View Profile">
                                   <span className="material-symbols-outlined" style={{ fontSize: 20 }}>account_circle</span>
                                 </button>
@@ -3321,7 +3366,7 @@ export default function TeacherDashboard({ profile }) {
           })()}
 
         </div>
-      ); })()}
+      )}
 
           {activeTab === 'timetable' && (
             <div className="portal-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -3553,21 +3598,7 @@ export default function TeacherDashboard({ profile }) {
             </div>
           )}
 
-      {activeTab === 'target' && (
-        <div className="portal-card" style={{ padding: 32, textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined">arrow_back</span>
-            </button>
-            <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Yearly Target Stand</h2>
-          </div>
-          <div style={{ background: 'linear-gradient(135deg, #1976d2, #1565c0)', color: 'white', padding: 40, borderRadius: 20 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 64, marginBottom: 16 }}>target</span>
-            <h1 style={{ fontSize: 36, margin: '0 0 16px 0' }}>{profile?.yearlyTarget || "Target Not Assigned"}</h1>
-            <p style={{ opacity: 0.9 }}>This is your primary performance goal for the current academic year as set by your Service Manager.</p>
-          </div>
-        </div>
-      )}
+
 
 
       {activeTab === 'materials' && (
@@ -3679,6 +3710,30 @@ export default function TeacherDashboard({ profile }) {
                 >
                   + Add Class Test
                 </button>
+
+                {classTeacherBatches.length > 0 && (
+                  <button 
+                    className="btn btn-outline btn-sm" 
+                    style={{ whiteSpace: 'nowrap', borderColor: '#8b5cf6', color: '#8b5cf6' }}
+                    onClick={() => {
+                      setSchoolTestModal({ 
+                        isOpen: true, 
+                        step: 1, 
+                        form: { 
+                          batch: classTeacherBatches[0], 
+                          testType: '1st Unit Test', 
+                          maxMarks: '',
+                          subjectsStr: '' 
+                        }, 
+                        students: [],
+                        subjects: []
+                      });
+                      setMarksData({});
+                    }}
+                  >
+                    + Add School Exam
+                  </button>
+                )}
               </div>
             </div>
             <div className="table-responsive">
@@ -4349,6 +4404,189 @@ export default function TeacherDashboard({ profile }) {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* School Exam Modal */}
+      {schoolTestModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'var(--surface-card)', padding: 32, borderRadius: 12, width: schoolTestModal.step === 1 ? 500 : 900, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--surface-border)' }}>
+            
+            {schoolTestModal.step === 1 && (
+              <>
+                <h2 style={{ margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>history_edu</span>
+                  Configure School Exam
+                </h2>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="form-group">
+                    <label className="form-label">Select Batch (Class Teacher Only)</label>
+                    <select className="portal-select" value={schoolTestModal.form.batch} onChange={e => setSchoolTestModal({ ...schoolTestModal, form: { ...schoolTestModal.form, batch: e.target.value } })}>
+                      {classTeacherBatches.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Test Type</label>
+                    <select className="portal-select" value={schoolTestModal.form.testType} onChange={e => setSchoolTestModal({ ...schoolTestModal, form: { ...schoolTestModal.form, testType: e.target.value } })}>
+                      <option value="1st Unit Test">1st Unit Test</option>
+                      <option value="2nd Unit Test">2nd Unit Test</option>
+                      <option value="3rd Unit Test">3rd Unit Test</option>
+                      <option value="Halfly Exam">Halfly Exam</option>
+                      <option value="Annually Exam">Annually Exam</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Max Marks</label>
+                    <input type="number" className="portal-input" placeholder="e.g. 100" value={schoolTestModal.form.maxMarks} onChange={e => setSchoolTestModal({ ...schoolTestModal, form: { ...schoolTestModal.form, maxMarks: e.target.value } })} />
+                  </div>
+
+                  {/* Define Subjects block removed */}
+                </div>
+
+                <div className="modal-footer" style={{ marginTop: 24, justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost" onClick={() => setSchoolTestModal({ ...schoolTestModal, isOpen: false })}>Cancel</button>
+                  <button 
+                    className="btn btn-brand"
+                    disabled={!schoolTestModal.form.maxMarks || !schoolTestModal.form.batch}
+                    onClick={async () => {
+                      const { batch } = schoolTestModal.form;
+                      try {
+                        const batchStudents = [];
+                        const q = query(collection(db, 'students'), where('batch', '==', batch));
+                        const snap = await getDocs(q);
+                        
+                        const uniqueSubjects = new Set(['Mathematics', 'Science', 'SST', 'English']);
+                        
+                        snap.forEach(doc => {
+                          const data = doc.data();
+                          batchStudents.push({ id: doc.id, ...data });
+                          
+                          // Auto-extract languages and technologies
+                          if (Array.isArray(data.languages)) data.languages.forEach(s => uniqueSubjects.add(s));
+                          if (Array.isArray(data.technologies)) data.technologies.forEach(s => uniqueSubjects.add(s));
+                          
+                          // Legacy/fallback extraction
+                          const subs = data.subjects || data.selectedSubjects || data.enrolledSubjects || data.courseSubjects;
+                          if (Array.isArray(subs)) {
+                            subs.forEach(s => uniqueSubjects.add(s));
+                          } else if (typeof subs === 'string') {
+                            subs.split(',').forEach(s => uniqueSubjects.add(s.trim()));
+                          }
+                        });
+                        
+                        let derivedSubjects = [...uniqueSubjects].filter(Boolean);
+                        
+                        // Fallback if no student has subjects defined
+                        if (derivedSubjects.length === 0) {
+                          derivedSubjects = assignedSubjects.length > 0 ? assignedSubjects : SUBJECTS;
+                        }
+
+                        setSchoolTestModal({ ...schoolTestModal, step: 2, students: batchStudents, subjects: derivedSubjects });
+                      } catch (err) {
+                        alert("Error fetching students: " + err.message);
+                      }
+                    }}
+                  >
+                    Next Step
+                  </button>
+                </div>
+              </>
+            )}
+
+            {schoolTestModal.step === 2 && (
+              <>
+                <h2 style={{ margin: '0 0 8px 0' }}>Enter Spreadsheet Marks: {schoolTestModal.form.batch}</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>
+                  {schoolTestModal.form.testType} • Max Marks: {schoolTestModal.form.maxMarks}
+                </p>
+
+                <div className="table-responsive" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                  <table className="portal-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--surface-card)', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                      <tr>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: 200 }}>Student Name</th>
+                        {schoolTestModal.subjects.map(sub => (
+                          <th key={sub} style={{ padding: '12px 8px', textAlign: 'center' }}>{sub}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schoolTestModal.students.length === 0 ? (
+                        <tr><td colSpan={schoolTestModal.subjects.length + 1} style={{ textAlign: 'center', padding: 24 }}>No students found in this batch.</td></tr>
+                      ) : schoolTestModal.students.map(student => (
+                        <tr key={student.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px 16px', fontWeight: '500' }}>{student.studentName}</td>
+                          {schoolTestModal.subjects.map(sub => (
+                            <td key={sub} style={{ padding: '8px', textAlign: 'center' }}>
+                              <input 
+                                type="number" 
+                                className="portal-input" 
+                                style={{ width: 60, padding: '6px', textAlign: 'center' }} 
+                                value={marksData[`${student.id}_${sub}`] || ''} 
+                                onChange={e => setMarksData({...marksData, [`${student.id}_${sub}`]: e.target.value})} 
+                                max={schoolTestModal.form.maxMarks} 
+                                min={0} 
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="modal-footer" style={{ marginTop: 24, justifyContent: 'space-between' }}>
+                  <button className="btn btn-ghost" onClick={() => setSchoolTestModal({ ...schoolTestModal, step: 1 })}>Back</button>
+                  <button 
+                    className="btn btn-brand" 
+                    onClick={async () => {
+                      if (!window.confirm("Submit marks for all students?")) return;
+                      setSaving(true);
+                      try {
+                        const batchRef = writeBatch(db);
+                        const testDate = new Date().toISOString();
+                        
+                        schoolTestModal.students.forEach(student => {
+                          const marksObj = {};
+                          schoolTestModal.subjects.forEach(sub => {
+                            const val = marksData[`${student.id}_${sub}`];
+                            marksObj[sub] = (val === undefined || val === '') ? null : Number(val);
+                          });
+
+                          const newDocRef = doc(collection(db, 'school_test_marks'));
+                          batchRef.set(newDocRef, {
+                            batch: schoolTestModal.form.batch,
+                            testType: schoolTestModal.form.testType,
+                            maxMarks: Number(schoolTestModal.form.maxMarks),
+                            studentId: student.id,
+                            studentName: student.studentName,
+                            marks: marksObj,
+                            teacherId: profile?.id || 'unknown',
+                            teacherName: profile?.fullName || 'Teacher',
+                            createdAt: testDate
+                          });
+                        });
+                        
+                        await batchRef.commit();
+                        alert("School Exam Marks saved successfully!");
+                        setSchoolTestModal({ isOpen: false, step: 1, form: { batch: '', testType: '1st Unit Test', maxMarks: '', subjectsStr: '' }, students: [], subjects: [] });
+                        setMarksData({});
+                      } catch (e) {
+                        console.error(e);
+                        alert("Failed to submit marks.");
+                      }
+                      setSaving(false);
+                    }}
+                  >
+                    {saving ? 'Saving...' : 'Submit Spreadsheet'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

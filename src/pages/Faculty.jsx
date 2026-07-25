@@ -276,8 +276,49 @@ export default function Faculty() {
           <h2>📅 Master Weekly Timetable</h2>
           <p style={{ color: 'var(--text-secondary)' }}>Manage all simultaneous batches and lectures for the entire center.</p>
         </div>
-        
-        <div style={{ overflowX: 'auto' }}>
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #timetable-container, #timetable-container * {
+              visibility: visible;
+            }
+            #timetable-container {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              zoom: 0.55;
+            }
+            @page {
+              size: landscape;
+              margin: 5mm;
+            }
+            .portal-table {
+              page-break-inside: avoid;
+            }
+            #timetable-container select {
+              -webkit-appearance: none;
+              appearance: none;
+              border: none !important;
+              background: transparent !important;
+              color: #000 !important;
+            }
+            #timetable-container input {
+              border: none !important;
+              background: transparent !important;
+              color: #000 !important;
+            }
+            #timetable-container button {
+              display: none !important;
+            }
+            .syllabus-tracker-card {
+              display: none !important;
+            }
+          }
+        `}</style>
+        <div id="timetable-container" style={{ overflowX: 'auto' }}>
           <table className="portal-table" style={{ minWidth: '1400px', borderCollapse: 'collapse', border: '2px solid #ccc' }}>
             <thead>
               <tr style={{ background: '#FFEB3B', color: '#000' }}>
@@ -515,7 +556,11 @@ export default function Faculty() {
           </table>
         </div>
         
-        <div style={{ marginTop: '20px', textAlign: 'right' }}>
+        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+          <button className="btn btn-outline" onClick={() => window.print()}>
+            <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: '6px', fontSize: '18px' }}>download</span>
+            Download PDF
+          </button>
           <button className="btn btn-brand" onClick={handlePublishTimetable} disabled={publishingTimetable}>
             <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: '6px', fontSize: '18px' }}>publish</span>
             {publishingTimetable ? 'Publishing...' : 'Push Master Timetable to All'}

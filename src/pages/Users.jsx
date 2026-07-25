@@ -22,7 +22,7 @@ const formatRole = (role) => {
 };
 
 function AddUserModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'teacher', password: '', joiningDate: '', cvLink: '', subjects: [], classTeacherBatch: [], yearlyTarget: [], assignedBatches: [] });
+  const [form, setForm]     = useState({ email: '', fullName: '', mobile: '', role: 'teacher', password: '', joiningDate: '', cvLink: '', subjects: [], classTeacherBatch: [], assignedBatches: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
@@ -65,7 +65,6 @@ function AddUserModal({ onClose, onSaved }) {
         cvLink:    form.cvLink.trim(),
         subjects:  form.subjects.join(', '),
         classTeacherBatch: form.classTeacherBatch,
-        yearlyTarget: form.yearlyTarget.join(' | '),
         assignedBatches: form.assignedBatches,
         temporaryPassword: form.password,
         createdAt: serverTimestamp(),
@@ -280,29 +279,7 @@ function AddUserModal({ onClose, onSaved }) {
               </div>
             </div>
             
-            <div className="form-group" style={{ marginTop: 12 }}>
-              <label className="form-label">Yearly Targets</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--surface-bg)', padding: 12, borderRadius: 8, border: '1px solid var(--surface-border)' }}>
-                {TARGETS.map(target => (
-                  <label key={target} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={form.yearlyTarget.includes(target)}
-                      onChange={e => {
-                        const isChecked = e.target.checked;
-                        setForm(f => ({
-                          ...f,
-                          yearlyTarget: isChecked 
-                            ? [...f.yearlyTarget, target] 
-                            : f.yearlyTarget.filter(t => t !== target)
-                        }));
-                      }}
-                    />
-                    {target}
-                  </label>
-                ))}
-              </div>
-            </div>
+
           </>
         )}
 
@@ -326,8 +303,7 @@ function EditUserModal({ user, onClose, onSaved }) {
     password: '',
     subjects: user.subjects ? user.subjects.split(',').map(s => s.trim()).filter(Boolean) : [],
     classTeacherBatch: user.classTeacherBatch ? (Array.isArray(user.classTeacherBatch) ? user.classTeacherBatch : [user.classTeacherBatch]) : [],
-    assignedBatches: user.assignedBatches || [],
-    yearlyTarget: user.yearlyTarget ? user.yearlyTarget.split('|').map(s => s.trim()).filter(Boolean) : []
+    assignedBatches: user.assignedBatches || []
   });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -373,7 +349,6 @@ function EditUserModal({ user, onClose, onSaved }) {
         updateData.subjects = form.subjects.join(', ');
         updateData.classTeacherBatch = form.classTeacherBatch;
         updateData.assignedBatches = form.assignedBatches;
-        updateData.yearlyTarget = form.yearlyTarget.join(' | ');
       }
 
       await updateDoc(doc(db, 'users', user.id), updateData);
@@ -525,29 +500,7 @@ function EditUserModal({ user, onClose, onSaved }) {
               </div>
             </div>
 
-            <div className="form-group" style={{ marginTop: 12 }}>
-              <label className="form-label">Yearly Targets</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--surface-bg)', padding: 12, borderRadius: 8, border: '1px solid var(--surface-border)' }}>
-                {TARGETS.map(target => (
-                  <label key={target} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={form.yearlyTarget.includes(target)}
-                      onChange={e => {
-                        const isChecked = e.target.checked;
-                        setForm(f => ({
-                          ...f,
-                          yearlyTarget: isChecked 
-                            ? [...f.yearlyTarget, target] 
-                            : f.yearlyTarget.filter(t => t !== target)
-                        }));
-                      }}
-                    />
-                    {target}
-                  </label>
-                ))}
-              </div>
-            </div>
+
           </>
         )}
 
@@ -612,12 +565,25 @@ function DeleteUserModal({ user, onClose, onSaved }) {
   );
 }
 
+const getTeacherScore = (teacher) => {
+  let baseScore = 65; // base points representing average attendance, tasks, and syllabus
+  if (teacher.managerFeedbacks && teacher.managerFeedbacks.length > 0) {
+    const totalStars = teacher.managerFeedbacks.reduce((acc, fb) => acc + (fb.rating || 0), 0);
+    const avgStars = totalStars / teacher.managerFeedbacks.length;
+    baseScore += (avgStars / 5) * 35; // up to 35 points based on feedback
+  } else {
+     baseScore += 15; // default 15 points if no feedback yet
+  }
+  return Math.min(100, Math.round(baseScore));
+};
+
 function FeedbackModal({ teacher, onClose, onSaved }) {
   const [rating, setRating] = useState(0);
   const [disciplineRating, setDisciplineRating] = useState(0);
   const [teachingQualityRating, setTeachingQualityRating] = useState(0);
   const [communicationRating, setCommunicationRating] = useState(0);
   const [professionalismRating, setProfessionalismRating] = useState(0);
+  const [improvementRating, setImprovementRating] = useState(0);
   const [impression, setImpression] = useState('');
   const [review, setReview] = useState('');
   const [impressiveAreas, setImpressiveAreas] = useState('');
@@ -650,6 +616,7 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
         teachingQualityRating,
         communicationRating,
         professionalismRating,
+        improvementRating,
         impression,
         review: review.trim(),
         impressiveAreas: impressiveAreas.trim(),
@@ -660,9 +627,19 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
       
       const targetObjects = validTargets.map((t, i) => ({ id: `wt_${Date.now()}_${i}`, title: t, completed: false }));
 
+      const simulatedTeacher = {
+        ...teacher,
+        managerFeedbacks: [...(teacher.managerFeedbacks || []), fbData]
+      };
+      const newScore = getTeacherScore(simulatedTeacher);
+
       await updateDoc(doc(db, 'users', teacher.id), {
         managerFeedbacks: arrayUnion(fbData),
-        currentWeeklyTargets: targetObjects
+        currentWeeklyTargets: targetObjects,
+        performanceHistory: arrayUnion({
+          date: fbData.date,
+          score: newScore
+        })
       });
 
       await createNotification(teacher.id, 'manager_feedback', {
@@ -741,6 +718,14 @@ function FeedbackModal({ teacher, onClose, onSaved }) {
             <div style={{ display: 'flex', gap: 4 }}>
               {[1,2,3,4,5].map(star => (
                 <span key={star} onClick={() => setProfessionalismRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= professionalismRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="form-label" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Improvement</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1,2,3,4,5].map(star => (
+                <span key={star} onClick={() => setImprovementRating(star)} className="material-symbols-outlined" style={{ fontSize: 24, cursor: 'pointer', color: star <= improvementRating ? '#fbc02d' : '#e0e0e0', transition: 'color 0.2s' }}>star</span>
               ))}
             </div>
           </div>
@@ -833,17 +818,6 @@ export default function Users() {
 
   const isSunday = new Date().getDay() === 0;
 
-  const getTeacherScore = (teacher) => {
-    let baseScore = 65; // base points representing average attendance, tasks, and syllabus
-    if (teacher.managerFeedbacks && teacher.managerFeedbacks.length > 0) {
-      const totalStars = teacher.managerFeedbacks.reduce((acc, fb) => acc + (fb.rating || 0), 0);
-      const avgStars = totalStars / teacher.managerFeedbacks.length;
-      baseScore += (avgStars / 5) * 35; // up to 35 points based on feedback
-    } else {
-       baseScore += 15; // default 15 points if no feedback yet
-    }
-    return Math.min(100, Math.round(baseScore));
-  };
 
   const fetchUsers = async () => {
     setLoading(true);
