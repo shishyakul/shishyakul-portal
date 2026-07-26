@@ -70,6 +70,7 @@ const NAV_CONFIG = {
     { to: '/dashboard#attendance', icon: 'event_available', label: 'Attendance' },
     { to: '/dashboard#performance', icon: 'military_tech', label: 'Performance' },
     { to: '/dashboard#feedbacks',  icon: 'reviews',        label: 'Manager Feedback' },
+    { to: '/dashboard#salary',     icon: 'account_balance_wallet', label: 'Salary' },
   ],
   student: [
     { to: '/dashboard#feed',      icon: 'dashboard',       label: 'My Feed' },

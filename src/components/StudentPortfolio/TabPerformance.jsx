@@ -12,6 +12,9 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
   const [savingMarks, setSavingMarks] = useState(false);
   const { profile } = useAuth();
   const isServiceManager = profile?.role === 'service_manager';
+  const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
+  const isClassTeacher = profile?.role === 'teacher' && classTeacherBatches.includes(student.batch);
+  const canEditMarks = isServiceManager || isClassTeacher;
 
   useEffect(() => {
     async function fetchPerformance() {
@@ -163,17 +166,27 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                     const subjects = Object.keys(exam.marks || {});
                     let validSubjectsCount = 0;
                     let totalMarksObtained = 0;
+                    let totalMaxMarks = 0;
                     
                     subjects.forEach(sub => {
-                      const mk = exam.marks[sub];
-                      if (mk !== null && mk !== undefined && mk !== '') {
+                      const mkData = exam.marks[sub];
+                      let obtained, max;
+                      if (typeof mkData === 'object' && mkData !== null) {
+                        obtained = mkData.obtained;
+                        max = mkData.max;
+                      } else {
+                        obtained = mkData;
+                        max = exam.maxMarks || 0;
+                      }
+                      
+                      if (obtained !== null && obtained !== undefined && obtained !== '') {
                         validSubjectsCount++;
-                        totalMarksObtained += Number(mk);
+                        totalMarksObtained += Number(obtained);
+                        totalMaxMarks += Number(max);
                       }
                     });
                     
-                    const grandTotal = exam.maxMarks * validSubjectsCount;
-                    const overallPercentage = grandTotal > 0 ? ((totalMarksObtained / grandTotal) * 100).toFixed(1) : 0;
+                    const overallPercentage = totalMaxMarks > 0 ? ((totalMarksObtained / totalMaxMarks) * 100).toFixed(1) : 0;
                     
                     return (
                       <tr key={exam.id}>
@@ -182,12 +195,21 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                         <td>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                             {subjects.map(sub => {
-                              const mk = exam.marks[sub];
-                              const isValid = mk !== null && mk !== undefined && mk !== '';
-                              const pct = isValid && exam.maxMarks > 0 ? (mk / exam.maxMarks) * 100 : 0;
+                              const mkData = exam.marks[sub];
+                              let obtained, max;
+                              if (typeof mkData === 'object' && mkData !== null) {
+                                obtained = mkData.obtained;
+                                max = mkData.max;
+                              } else {
+                                obtained = mkData;
+                                max = exam.maxMarks || 0;
+                              }
+                              
+                              const isValid = obtained !== null && obtained !== undefined && obtained !== '';
+                              const pct = isValid && max > 0 ? (obtained / max) * 100 : 0;
                               return (
                                 <span key={sub} style={{ fontSize: 12, background: '#f8fafc', padding: '4px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                  {sub}: {isValid ? <strong style={{ color: pct >= 80 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444' }}>{mk}</strong> : <strong style={{ color: '#94a3b8' }}>NA</strong>}/{exam.maxMarks}
+                                  {sub}: {isValid ? <strong style={{ color: pct >= 80 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444' }}>{obtained}</strong> : <strong style={{ color: '#94a3b8' }}>NA</strong>}/{max}
                                 </span>
                               );
                             })}
@@ -198,13 +220,20 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                             <span style={{ fontWeight: 'bold', color: overallPercentage >= 80 ? '#10b981' : overallPercentage >= 40 ? '#f59e0b' : '#ef4444' }}>
                               {overallPercentage}%
                             </span>
-                            {isServiceManager && (
+                            {canEditMarks && (
                               <button 
                                 className="btn-ghost btn-sm" 
                                 onClick={() => {
                                   const initialMarks = {};
                                   Object.keys(exam.marks || {}).forEach(sub => {
-                                    initialMarks[sub] = exam.marks[sub] !== null ? exam.marks[sub] : '';
+                                    const mkData = exam.marks[sub];
+                                    if (typeof mkData === 'object' && mkData !== null) {
+                                      initialMarks[`${sub}_obtained`] = mkData.obtained !== null ? mkData.obtained : '';
+                                      initialMarks[`${sub}_max`] = mkData.max !== null ? mkData.max : '';
+                                    } else {
+                                      initialMarks[`${sub}_obtained`] = mkData !== null ? mkData : '';
+                                      initialMarks[`${sub}_max`] = exam.maxMarks || '';
+                                    }
                                   });
                                   setEditSchoolModal({ isOpen: true, selectedExamId: exam.id, marksData: initialMarks });
                                 }}
@@ -356,7 +385,14 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                     const initialMarks = {};
                     if (exam) {
                       Object.keys(exam.marks || {}).forEach(sub => {
-                        initialMarks[sub] = exam.marks[sub] !== null ? exam.marks[sub] : '';
+                        const mkData = exam.marks[sub];
+                        if (typeof mkData === 'object' && mkData !== null) {
+                          initialMarks[`${sub}_obtained`] = mkData.obtained !== null ? mkData.obtained : '';
+                          initialMarks[`${sub}_max`] = mkData.max !== null ? mkData.max : '';
+                        } else {
+                          initialMarks[`${sub}_obtained`] = mkData !== null ? mkData : '';
+                          initialMarks[`${sub}_max`] = exam.maxMarks || '';
+                        }
                       });
                     }
                     setEditSchoolModal(prev => ({ ...prev, selectedExamId: exId, marksData: initialMarks }));
@@ -373,29 +409,43 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                 <div style={{ background: 'var(--surface-bg)', padding: '16px', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>Update Subjects (Leave blank for NA)</h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {Object.keys(editSchoolModal.marksData).map(sub => {
+                    {(() => {
                       const activeExam = schoolExams.find(x => x.id === editSchoolModal.selectedExamId);
-                      const max = activeExam ? activeExam.maxMarks : 100;
-                      return (
-                        <div key={sub} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 500, fontSize: '14px' }}>{sub}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <input 
-                              type="number" 
-                              className="input-field" 
-                              style={{ width: '80px', padding: '6px 12px' }}
-                              placeholder="NA"
-                              value={editSchoolModal.marksData[sub]}
-                              onChange={(e) => setEditSchoolModal(prev => ({
-                                ...prev,
-                                marksData: { ...prev.marksData, [sub]: e.target.value }
-                              }))}
-                            />
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>/ {max}</span>
+                      if (!activeExam) return null;
+                      const subjects = Object.keys(activeExam.marks || {});
+                      return subjects.map(sub => {
+                        return (
+                          <div key={sub} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 500, fontSize: '14px' }}>{sub}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <input 
+                                type="number" 
+                                className="input-field" 
+                                style={{ width: '60px', padding: '6px 8px', textAlign: 'center' }}
+                                placeholder="Marks"
+                                value={editSchoolModal.marksData[`${sub}_obtained`] !== undefined ? editSchoolModal.marksData[`${sub}_obtained`] : ''}
+                                onChange={(e) => setEditSchoolModal(prev => ({
+                                  ...prev,
+                                  marksData: { ...prev.marksData, [`${sub}_obtained`]: e.target.value }
+                                }))}
+                              />
+                              <span style={{ color: 'var(--text-secondary)' }}>/</span>
+                              <input 
+                                type="number" 
+                                className="input-field" 
+                                style={{ width: '60px', padding: '6px 8px', textAlign: 'center', background: 'var(--surface-bg)' }}
+                                placeholder="Max"
+                                value={editSchoolModal.marksData[`${sub}_max`] !== undefined ? editSchoolModal.marksData[`${sub}_max`] : ''}
+                                onChange={(e) => setEditSchoolModal(prev => ({
+                                  ...prev,
+                                  marksData: { ...prev.marksData, [`${sub}_max`]: e.target.value }
+                                }))}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}
@@ -409,11 +459,22 @@ export default function TabPerformance({ student, allFeedbacks = [] }) {
                 onClick={async () => {
                   setSavingMarks(true);
                   try {
+                    const activeExam = schoolExams.find(x => x.id === editSchoolModal.selectedExamId);
+                    const subjects = Object.keys(activeExam.marks || {});
                     const finalMarks = {};
-                    Object.keys(editSchoolModal.marksData).forEach(sub => {
-                      const val = editSchoolModal.marksData[sub];
-                      finalMarks[sub] = (val === '' || val === undefined) ? null : Number(val);
+                    subjects.forEach(sub => {
+                      const obtainedVal = editSchoolModal.marksData[`${sub}_obtained`];
+                      const maxVal = editSchoolModal.marksData[`${sub}_max`];
+                      if (obtainedVal !== '' && obtainedVal !== undefined && maxVal !== '' && maxVal !== undefined) {
+                        finalMarks[sub] = {
+                          obtained: Number(obtainedVal),
+                          max: Number(maxVal)
+                        };
+                      } else {
+                        finalMarks[sub] = null;
+                      }
                     });
+                    
                     await updateDoc(doc(db, 'school_test_marks', editSchoolModal.selectedExamId), {
                       marks: finalMarks
                     });

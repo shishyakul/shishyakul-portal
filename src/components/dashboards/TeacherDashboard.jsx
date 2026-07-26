@@ -343,6 +343,7 @@ export default function TeacherDashboard({ profile }) {
   const [saving, setSaving] = useState(false);
 
   const [testRecords, setTestRecords] = useState([]);
+  const [schoolTestRecords, setSchoolTestRecords] = useState([]);
   const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
   const [viewTestRecord, setViewTestRecord] = useState(null);
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
@@ -768,10 +769,65 @@ export default function TeacherDashboard({ profile }) {
     });
     // 7. Listen to Test Records
     let unsubTestRecords = () => {};
+    let unsubSchoolTestRecords = () => {};
     if (teacherId) {
       const qTestRecords = query(collection(db, 'test_marks'), where('uploadedBy', '==', teacherId));
       unsubTestRecords = onSnapshot(qTestRecords, (snap) => {
         setTestRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)));
+      });
+
+      const qSchoolTestRecords = query(collection(db, 'school_test_marks'), where('teacherId', 'in', [teacherId, 'unknown']));
+      unsubSchoolTestRecords = onSnapshot(qSchoolTestRecords, (snap) => {
+        const grouped = {};
+        snap.forEach(doc => {
+          const data = doc.data();
+          const dateStr = data.createdAt ? data.createdAt.split('T')[0] : 'unknown_date';
+          const key = `${data.batch}_${data.testType}_${dateStr}`;
+          
+          if (!grouped[key]) {
+            grouped[key] = {
+              id: key,
+              batch: data.batch,
+              testType: data.testType,
+              subject: 'All Subjects',
+              topic: data.testType,
+              testDate: dateStr,
+              maxMarks: 'Multiple',
+              uploadedAt: data.createdAt,
+              isSchoolExam: true,
+              results: []
+            };
+          }
+          
+          let totalObtained = 0;
+          let totalMax = 0;
+          const normalizedMarks = {};
+          if (data.marks) {
+            Object.entries(data.marks).forEach(([subName, subData]) => {
+              if (subData && typeof subData === 'object' && subData.obtained !== undefined) {
+                totalObtained += Number(subData.obtained);
+                totalMax += Number(subData.max);
+                normalizedMarks[subName] = subData;
+              } else if (subData !== null && subData !== undefined) {
+                totalObtained += Number(subData);
+                const subMax = Number(data.maxMarks || 0);
+                totalMax += subMax;
+                normalizedMarks[subName] = { obtained: Number(subData), max: subMax };
+              }
+            });
+          }
+          const overallPct = totalMax > 0 ? ((totalObtained / totalMax) * 100).toFixed(2) : 0;
+          
+          grouped[key].results.push({ 
+            studentId: data.studentId, 
+            studentName: data.studentName, 
+            marks: totalObtained, 
+            percentage: overallPct, 
+            rawMarks: normalizedMarks, 
+            docId: doc.id 
+          });
+        });
+        setSchoolTestRecords(Object.values(grouped).sort((a,b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)));
       });
     }
 
@@ -785,6 +841,7 @@ export default function TeacherDashboard({ profile }) {
       unsubUsers();
       unsubWorkflows();
       unsubTestRecords();
+      unsubSchoolTestRecords();
     };
   }, [profile?.assignedBatches, teacherId]);
 
@@ -1610,6 +1667,14 @@ export default function TeacherDashboard({ profile }) {
                <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Grading & Submissions</h3>
                <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Grade tests & assignments</p>
              </div>
+
+             <div className="portal-card hover-lift" style={{ cursor: 'pointer', textAlign: 'center', padding: '32px 20px', transition: 'all 0.3s ease' }} onClick={() => handleTabChange('salary')}>
+               <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(253,180,42,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                 <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--brand-primary)' }}>account_balance_wallet</span>
+               </div>
+               <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Salary</h3>
+               <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>View your salary details</p>
+             </div>
            </div>
         </div>
       )}
@@ -2183,6 +2248,8 @@ export default function TeacherDashboard({ profile }) {
                             outerRadius={75}
                             paddingAngle={4}
                             dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                            labelLine={true}
                             stroke="none"
                           >
                           <Label 
@@ -2645,7 +2712,7 @@ export default function TeacherDashboard({ profile }) {
                         </div>
                         <div>
                           <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Tests Conducted</span>
-                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{(selectedBatchAnalytics?.tests || []).length}</h4>
+                          <h4 style={{ margin: '4px 0 0 0', fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{(selectedBatchAnalytics?.tests || []).length + (schoolTestRecords || []).filter(t => t.batch === selectedBatchTab).length}</h4>
                         </div>
                       </div>
                     </div>
@@ -3176,13 +3243,18 @@ export default function TeacherDashboard({ profile }) {
                       return 0;
                     };
 
-                    const allTests = [...(selectedBatchAnalytics?.tests || [])].sort((a,b) => parseTestDate(b.testDate || b.uploadedAt) - parseTestDate(a.testDate || a.uploadedAt));
+                    const combinedTests = [...(selectedBatchAnalytics?.tests || []), ...(schoolTestRecords || []).filter(t => t.batch === selectedBatchTab)]
+                      .sort((a,b) => parseTestDate(b.testDate || b.uploadedAt) - parseTestDate(a.testDate || a.uploadedAt));
                     
                     const filteredTests = testHistoryFilter === 'all' 
-                      ? allTests 
-                      : allTests.filter(t => testHistoryFilter === 'class' ? (t.testType === 'Class Test' || t.topic === 'Class Test') : (t.testType !== 'Class Test' && t.topic !== 'Class Test'));
+                      ? combinedTests 
+                      : combinedTests.filter(t => {
+                          if (testHistoryFilter === 'school') return t.isSchoolExam;
+                          if (testHistoryFilter === 'class') return t.testType === 'Class Test' || t.topic === 'Class Test';
+                          return t.testType !== 'Class Test' && t.topic !== 'Class Test' && !t.isSchoolExam;
+                        });
 
-                    if (allTests.length === 0) return <div style={{ textAlign: 'center', padding: '40px 20px' }}><span className="material-symbols-outlined" style={{ fontSize: 48, color: '#ccc', marginBottom: 12 }}>history_edu</span><p style={{ margin: 0, color: '#888', fontSize: 15 }}>No tests conducted yet.</p></div>;
+                    if (combinedTests.length === 0) return <div style={{ textAlign: 'center', padding: '40px 20px' }}><span className="material-symbols-outlined" style={{ fontSize: 48, color: '#ccc', marginBottom: 12 }}>history_edu</span><p style={{ margin: 0, color: '#888', fontSize: 15 }}>No tests conducted yet.</p></div>;
 
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -3208,6 +3280,13 @@ export default function TeacherDashboard({ profile }) {
                           >
                             Weekly Test
                           </button>
+                          <button 
+                            className={`btn-ghost ${testHistoryFilter === 'school' ? 'active' : ''}`}
+                            style={{ padding: '6px 16px', borderRadius: 20, background: testHistoryFilter === 'school' ? '#e91e63' : '#f5f5f5', color: testHistoryFilter === 'school' ? '#fff' : '#666', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, transition: 'all 0.2s' }}
+                            onClick={() => setTestHistoryFilter('school')}
+                          >
+                            School Test
+                          </button>
                         </div>
                         
                         {filteredTests.length === 0 && (
@@ -3232,8 +3311,13 @@ export default function TeacherDashboard({ profile }) {
                               return { name: s ? (s.studentName || s.fullName || 'Unknown Student') : 'Unknown', marks: Number(r.marks) || 0 };
                             });
                             
-                            const totalM = test.results.reduce((acc, curr) => acc + (Number(curr.marks) || 0), 0);
-                            avgM = Math.round((totalM / test.results.length) / Number(test.maxMarks || 1) * 100);
+                            if (test.isSchoolExam || isNaN(Number(test.maxMarks))) {
+                              const totalPct = test.results.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
+                              avgM = Math.round(totalPct / test.results.length);
+                            } else {
+                              const totalM = test.results.reduce((acc, curr) => acc + (Number(curr.marks) || 0), 0);
+                              avgM = Math.round((totalM / test.results.length) / Number(test.maxMarks || 1) * 100);
+                            }
                             avgStr = `${avgM}%`;
                           }
 
@@ -3264,7 +3348,7 @@ export default function TeacherDashboard({ profile }) {
                                     </strong>
                                     <span style={{ fontSize: 13, color: '#718096', display: 'flex', alignItems: 'center', gap: 4 }}>
                                       <span className="material-symbols-outlined" style={{ fontSize: 14 }}>assignment</span>
-                                      {test.testType || 'Class Test'} • Max Marks: <strong>{test.maxMarks}</strong>
+                                      {test.testType || 'Class Test'} {test.isSchoolExam ? '' : <>• Max Marks: <strong>{test.maxMarks}</strong></>}
                                     </span>
                                   </div>
                                 </div>
@@ -3298,50 +3382,126 @@ export default function TeacherDashboard({ profile }) {
                                   <div style={{ maxHeight: 350, overflowY: 'auto' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                       <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                                        <tr>
-                                          <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Rank</th>
-                                          <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Student Name</th>
-                                          <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Marks</th>
-                                          <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Percentage</th>
-                                        </tr>
+                                        {test.isSchoolExam ? (() => {
+                                          const allSubjSet = new Set();
+                                          (test.results || []).forEach(r => {
+                                            if (r.rawMarks) {
+                                              Object.keys(r.rawMarks).forEach(sub => allSubjSet.add(sub));
+                                            }
+                                          });
+                                          const allSubjArr = Array.from(allSubjSet).sort();
+                                          return (
+                                            <tr>
+                                              <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Rank</th>
+                                              <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Student Name</th>
+                                              {allSubjArr.map(s => <th key={s} style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>{s}</th>)}
+                                              <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Grand Total</th>
+                                              <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Overall %</th>
+                                            </tr>
+                                          );
+                                        })() : (
+                                          <tr>
+                                            <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Rank</th>
+                                            <th style={{ padding: '12px 24px', textAlign: 'left', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Student Name</th>
+                                            <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Marks</th>
+                                            <th style={{ padding: '12px 24px', textAlign: 'center', fontSize: 12, color: '#718096', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Percentage</th>
+                                          </tr>
+                                        )}
                                       </thead>
                                       <tbody>
                                         {sortedResults && sortedResults.length > 0 ? sortedResults.map((r, i) => {
                                           const s = enrichedStudents.find(st => st.id === r.studentId);
-                                          const sName = s ? (s.studentName || s.fullName || 'Unknown') : 'Unknown';
-                                          const pct = test.maxMarks > 0 ? Math.round((Number(r.marks) / test.maxMarks) * 100) : 0;
+                                          const sName = s ? (s.studentName || s.fullName || 'Unknown') : (r.studentName || 'Unknown');
+                                          const isSchoolTest = test.isSchoolExam;
+                                          
                                           let bg = '#fff';
                                           let medal = '';
                                           if (i === 0) { bg = '#fffdf0'; medal = '🥇 '; }
                                           else if (i === 1) { bg = '#f8f9fa'; medal = '🥈 '; }
                                           else if (i === 2) { bg = '#fef8ec'; medal = '🥉 '; }
 
-                                          return (
-                                            <tr key={i} style={{ background: bg, borderBottom: '1px solid #edf2f7', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = bg}>
-                                              <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: i < 3 ? 'bold' : 500, color: i < 3 ? '#d97706' : '#4a5568' }}>
-                                                {medal} #{i + 1}
-                                              </td>
-                                              <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: 500, color: '#1a202c' }}>
-                                                {sName}
-                                              </td>
-                                              <td style={{ padding: '12px 24px', textAlign: 'center', fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>
-                                                {r.marks} <span style={{ color: '#a0aec0', fontSize: 12, fontWeight: 500 }}>/ {test.maxMarks}</span>
-                                              </td>
-                                              <td style={{ padding: '12px 24px', textAlign: 'center' }}>
-                                                <span style={{ 
-                                                  background: pct >= 75 ? '#def7ec' : pct >= 40 ? '#fdf6b2' : '#fde8e8', 
-                                                  color: pct >= 75 ? '#03543f' : pct >= 40 ? '#723b13' : '#9b1c1c', 
-                                                  padding: '4px 10px', 
-                                                  borderRadius: 12, 
-                                                  fontSize: 12, 
-                                                  fontWeight: 'bold' 
-                                                }}>{pct}%</span>
-                                              </td>
-                                            </tr>
-                                          )
+                                          if (isSchoolTest) {
+                                            const allSubjSet = new Set();
+                                            (test.results || []).forEach(res => {
+                                              if (res.rawMarks) {
+                                                Object.keys(res.rawMarks).forEach(sub => allSubjSet.add(sub));
+                                              }
+                                            });
+                                            const allSubjArr = Array.from(allSubjSet).sort();
+                                            const pct = r.percentage || (test.maxMarks > 0 ? Math.round((Number(r.marks) / test.maxMarks) * 100) : 0);
+                                            let studentTotalMax = 0;
+                                            if (r.rawMarks) {
+                                              Object.values(r.rawMarks).forEach(subData => {
+                                                if (subData && subData.max) studentTotalMax += Number(subData.max);
+                                              });
+                                            }
+
+                                            return (
+                                              <tr key={i} style={{ background: bg, borderBottom: '1px solid #edf2f7', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = bg}>
+                                                <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: i < 3 ? 'bold' : 500, color: i < 3 ? '#d97706' : '#4a5568' }}>
+                                                  {medal} #{i + 1}
+                                                </td>
+                                                <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: 500, color: '#1a202c' }}>
+                                                  {sName}
+                                                </td>
+                                                {allSubjArr.map(subj => {
+                                                  const subData = r.rawMarks?.[subj];
+                                                  const hasData = subData && subData.obtained !== undefined && subData.max !== undefined;
+                                                  return (
+                                                    <td key={subj} style={{ padding: '12px 24px', textAlign: 'center', fontSize: 14, color: '#2d3748', borderLeft: '1px dashed #edf2f7', borderRight: '1px dashed #edf2f7' }}>
+                                                      {hasData ? (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                          <span style={{ fontWeight: 'bold' }}>{subData.obtained}</span>
+                                                          <span style={{ fontSize: 11, color: '#a0aec0' }}>/ {subData.max}</span>
+                                                        </div>
+                                                      ) : '-'}
+                                                    </td>
+                                                  );
+                                                })}
+                                                <td style={{ padding: '12px 24px', textAlign: 'center', fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>
+                                                  {r.marks} <span style={{ color: '#a0aec0', fontSize: 12, fontWeight: 500 }}>/ {studentTotalMax || '-'}</span>
+                                                </td>
+                                                <td style={{ padding: '12px 24px', textAlign: 'center' }}>
+                                                  <span style={{ 
+                                                    background: pct >= 75 ? '#def7ec' : pct >= 40 ? '#fdf6b2' : '#fde8e8', 
+                                                    color: pct >= 75 ? '#03543f' : pct >= 40 ? '#723b13' : '#9b1c1c', 
+                                                    padding: '4px 10px', 
+                                                    borderRadius: 12, 
+                                                    fontSize: 12, 
+                                                    fontWeight: 'bold' 
+                                                  }}>{pct}%</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          } else {
+                                            const pct = test.maxMarks > 0 ? Math.round((Number(r.marks) / test.maxMarks) * 100) : 0;
+                                            return (
+                                              <tr key={i} style={{ background: bg, borderBottom: '1px solid #edf2f7', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = bg}>
+                                                <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: i < 3 ? 'bold' : 500, color: i < 3 ? '#d97706' : '#4a5568' }}>
+                                                  {medal} #{i + 1}
+                                                </td>
+                                                <td style={{ padding: '12px 24px', fontSize: 14, fontWeight: 500, color: '#1a202c' }}>
+                                                  {sName}
+                                                </td>
+                                                <td style={{ padding: '12px 24px', textAlign: 'center', fontSize: 14, fontWeight: 'bold', color: '#2d3748' }}>
+                                                  {r.marks} <span style={{ color: '#a0aec0', fontSize: 12, fontWeight: 500 }}>/ {test.maxMarks}</span>
+                                                </td>
+                                                <td style={{ padding: '12px 24px', textAlign: 'center' }}>
+                                                  <span style={{ 
+                                                    background: pct >= 75 ? '#def7ec' : pct >= 40 ? '#fdf6b2' : '#fde8e8', 
+                                                    color: pct >= 75 ? '#03543f' : pct >= 40 ? '#723b13' : '#9b1c1c', 
+                                                    padding: '4px 10px', 
+                                                    borderRadius: 12, 
+                                                    fontSize: 12, 
+                                                    fontWeight: 'bold' 
+                                                  }}>{pct}%</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          }
                                         }) : (
                                           <tr>
-                                            <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: '#718096', fontSize: 14 }}>
+                                            <td colSpan="10" style={{ padding: '24px', textAlign: 'center', color: '#718096', fontSize: 14 }}>
                                               Results have not been uploaded for this test yet.
                                             </td>
                                           </tr>
@@ -3692,6 +3852,7 @@ export default function TeacherDashboard({ profile }) {
                 >
                   <option value="All">All Test Types</option>
                   <option value="class_test">Class Tests</option>
+                  <option value="school_test">School Exams</option>
                   <option value="weekly_test">Weekly Tests</option>
                 </select>
 
@@ -3750,10 +3911,12 @@ export default function TeacherDashboard({ profile }) {
                 </thead>
                 <tbody>
                   {(() => {
-                    const filteredTestRecords = testRecords.filter(tr => {
+                    const combinedRecords = [...testRecords, ...schoolTestRecords].sort((a,b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+                    const filteredTestRecords = combinedRecords.filter(tr => {
                       if (testFilter.batch !== 'All' && tr.batch !== testFilter.batch) return false;
                       if (testFilter.type === 'class_test' && !tr.isClassTest) return false;
-                      if (testFilter.type === 'weekly_test' && tr.isClassTest) return false;
+                      if (testFilter.type === 'school_test' && !tr.isSchoolExam) return false;
+                      if (testFilter.type === 'weekly_test' && (tr.isClassTest || tr.isSchoolExam)) return false;
                       return true;
                     });
 
@@ -3771,7 +3934,9 @@ export default function TeacherDashboard({ profile }) {
                           <td>{tr.maxMarks}</td>
                           <td>
                             <div style={{ display: 'flex', gap: 8 }}>
-                              {tr.isClassTest ? (
+                              {tr.isSchoolExam ? (
+                                <span className="badge" style={{ background: '#8b5cf6', color: '#fff', padding: '4px 8px', fontSize: 11 }}>SCHOOL EXAM</span>
+                              ) : tr.isClassTest ? (
                                 <span className="badge" style={{ background: 'var(--brand-primary)', color: '#fff', padding: '4px 8px', fontSize: 11 }}>CLASS TEST</span>
                               ) : (
                                 <>
@@ -4175,8 +4340,8 @@ export default function TeacherDashboard({ profile }) {
         />
       )}
       {viewTestRecord && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: 800, maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', padding: 32, borderRadius: 12, width: '100%', maxWidth: viewTestRecord.isSchoolExam ? 1400 : 800, maxHeight: '90vh', overflowY: 'auto', border: '1px solid #e0e0e0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
               <div>
                 <h2 style={{ margin: '0 0 8px 0', fontSize: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4194,6 +4359,15 @@ export default function TeacherDashboard({ profile }) {
               const results = viewTestRecord.results || [];
               if (results.length === 0) return <p style={{ color: 'var(--text-muted)' }}>No results found for this test.</p>;
               
+              let uniqueSubjects = [];
+              if (viewTestRecord.isSchoolExam) {
+                const subs = new Set();
+                results.forEach(r => {
+                  if (r.rawMarks) Object.keys(r.rawMarks).forEach(s => subs.add(s));
+                });
+                uniqueSubjects = Array.from(subs);
+              }
+
               const avgMarks = (results.reduce((acc, curr) => acc + Number(curr.marks), 0) / results.length).toFixed(1);
               const avgPercent = (results.reduce((acc, curr) => acc + Number(curr.percentage), 0) / results.length).toFixed(1);
               
@@ -4228,7 +4402,7 @@ export default function TeacherDashboard({ profile }) {
                     <div style={{ padding: 16, background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: 8 }}>
                       <p style={{ margin: '0 0 4px 0', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Class Average</p>
                       <h3 style={{ margin: 0, fontSize: 24, color: 'var(--brand-primary)' }}>{avgPercent}%</h3>
-                      <p style={{ margin: 0, fontSize: 12, color: '#666' }}>Avg Marks: {avgMarks} / {viewTestRecord.maxMarks}</p>
+                      <p style={{ margin: 0, fontSize: 12, color: '#666' }}>Avg Marks: {avgMarks} / {viewTestRecord.isSchoolExam ? 'Multiple' : viewTestRecord.maxMarks}</p>
                     </div>
                     <div style={{ padding: 16, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
                       <p style={{ margin: '0 0 4px 0', fontSize: 13, color: '#166534', fontWeight: 600 }}>Highest Performer</p>
@@ -4261,11 +4435,14 @@ export default function TeacherDashboard({ profile }) {
                   <div>
                     <h4 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Rankings</h4>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
+                        <tr style={{ borderBottom: '2px solid #ddd' }}>
                           <th style={{ padding: 12, textAlign: 'center', width: 80 }}>Rank</th>
                           <th style={{ padding: 12, textAlign: 'left' }}>Student Name</th>
-                          <th style={{ padding: 12, textAlign: 'center' }}>Marks</th>
+                          {uniqueSubjects.map(sub => (
+                            <th key={sub} style={{ padding: 12, textAlign: 'center' }}>{sub}</th>
+                          ))}
+                          <th style={{ padding: 12, textAlign: 'center' }}>Total Marks</th>
                           <th style={{ padding: 12, textAlign: 'center' }}>Percentage</th>
                         </tr>
                       </thead>
@@ -4284,6 +4461,13 @@ export default function TeacherDashboard({ profile }) {
                                 #{rank} {rank <= 3 && <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: 'middle' }}>workspace_premium</span>}
                               </td>
                               <td style={{ padding: 12, textAlign: 'left', fontWeight: rank <= 3 ? 600 : 400 }}>{getStudentName(res.studentId)}</td>
+                              {uniqueSubjects.map(sub => {
+                                const m = res.rawMarks?.[sub];
+                                let text = '-';
+                                if (m && typeof m === 'object' && m.obtained !== undefined) text = `${m.obtained}/${m.max}`;
+                                else if (m !== undefined && m !== null) text = `${m}/${viewTestRecord.maxMarks || '-'}`;
+                                return <td key={sub} style={{ padding: 12, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>{text}</td>;
+                              })}
                               <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>{res.marks}</td>
                               <td style={{ padding: 12, textAlign: 'center' }}>
                                 <span style={{ color: Number(res.percentage) < 33 ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{res.percentage}%</span>
@@ -4411,7 +4595,7 @@ export default function TeacherDashboard({ profile }) {
       {/* School Exam Modal */}
       {schoolTestModal.isOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'var(--surface-card)', padding: 32, borderRadius: 12, width: schoolTestModal.step === 1 ? 500 : 900, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--surface-border)' }}>
+          <div style={{ background: 'var(--surface-card)', padding: 32, borderRadius: 12, width: schoolTestModal.step === 1 ? 500 : 1400, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--surface-border)' }}>
             
             {schoolTestModal.step === 1 && (
               <>
@@ -4439,11 +4623,6 @@ export default function TeacherDashboard({ profile }) {
                     </select>
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Max Marks</label>
-                    <input type="number" className="portal-input" placeholder="e.g. 100" value={schoolTestModal.form.maxMarks} onChange={e => setSchoolTestModal({ ...schoolTestModal, form: { ...schoolTestModal.form, maxMarks: e.target.value } })} />
-                  </div>
-
                   {/* Define Subjects block removed */}
                 </div>
 
@@ -4451,7 +4630,7 @@ export default function TeacherDashboard({ profile }) {
                   <button className="btn btn-ghost" onClick={() => setSchoolTestModal({ ...schoolTestModal, isOpen: false })}>Cancel</button>
                   <button 
                     className="btn btn-brand"
-                    disabled={!schoolTestModal.form.maxMarks || !schoolTestModal.form.batch}
+                    disabled={!schoolTestModal.form.batch}
                     onClick={async () => {
                       const { batch } = schoolTestModal.form;
                       try {
@@ -4501,7 +4680,7 @@ export default function TeacherDashboard({ profile }) {
               <>
                 <h2 style={{ margin: '0 0 8px 0' }}>Enter Spreadsheet Marks: {schoolTestModal.form.batch}</h2>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>
-                  {schoolTestModal.form.testType} • Max Marks: {schoolTestModal.form.maxMarks}
+                  {schoolTestModal.form.testType}
                 </p>
 
                 <div className="table-responsive" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
@@ -4512,6 +4691,8 @@ export default function TeacherDashboard({ profile }) {
                         {schoolTestModal.subjects.map(sub => (
                           <th key={sub} style={{ padding: '12px 8px', textAlign: 'center' }}>{sub}</th>
                         ))}
+                        <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: 100 }}>Total</th>
+                        <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: 80 }}>%</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4522,17 +4703,69 @@ export default function TeacherDashboard({ profile }) {
                           <td style={{ padding: '8px 16px', fontWeight: '500' }}>{student.studentName}</td>
                           {schoolTestModal.subjects.map(sub => (
                             <td key={sub} style={{ padding: '8px', textAlign: 'center' }}>
-                              <input 
-                                type="number" 
-                                className="portal-input" 
-                                style={{ width: 60, padding: '6px', textAlign: 'center' }} 
-                                value={marksData[`${student.id}_${sub}`] || ''} 
-                                onChange={e => setMarksData({...marksData, [`${student.id}_${sub}`]: e.target.value})} 
-                                max={schoolTestModal.form.maxMarks} 
-                                min={0} 
-                              />
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <input 
+                                  type="number" 
+                                  className="portal-input" 
+                                  style={{ width: 50, padding: '6px', textAlign: 'center' }} 
+                                  placeholder="Marks"
+                                  value={marksData[`${student.id}_${sub}_obtained`] || ''} 
+                                  onChange={e => setMarksData({...marksData, [`${student.id}_${sub}_obtained`]: e.target.value})} 
+                                  min={0} 
+                                />
+                                <span style={{ color: 'var(--text-secondary)' }}>/</span>
+                                <input 
+                                  type="number" 
+                                  className="portal-input" 
+                                  style={{ width: 50, padding: '6px', textAlign: 'center', background: 'var(--surface-bg)' }} 
+                                  placeholder="Max"
+                                  value={marksData[`${student.id}_${sub}_max`] || ''} 
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    const newData = {...marksData, [`${student.id}_${sub}_max`]: val};
+                                    // Auto-fill logic from the first row
+                                    if (schoolTestModal.students[0].id === student.id) {
+                                      schoolTestModal.students.forEach(s => {
+                                        if (s.id !== student.id) {
+                                          newData[`${s.id}_${sub}_max`] = val;
+                                        }
+                                      });
+                                    }
+                                    setMarksData(newData);
+                                  }} 
+                                  min={0} 
+                                />
+                              </div>
                             </td>
                           ))}
+                          <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold' }}>
+                            {(() => {
+                              let obt = 0, max = 0;
+                              schoolTestModal.subjects.forEach(sub => {
+                                const o = Number(marksData[`${student.id}_${sub}_obtained`]);
+                                const m = Number(marksData[`${student.id}_${sub}_max`]);
+                                if (!isNaN(o) && !isNaN(m)) {
+                                  obt += o;
+                                  max += m;
+                                }
+                              });
+                              return `${obt} / ${max}`;
+                            })()}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: 'var(--brand-color)' }}>
+                            {(() => {
+                              let obt = 0, max = 0;
+                              schoolTestModal.subjects.forEach(sub => {
+                                const o = Number(marksData[`${student.id}_${sub}_obtained`]);
+                                const m = Number(marksData[`${student.id}_${sub}_max`]);
+                                if (!isNaN(o) && !isNaN(m) && m > 0) {
+                                  obt += o;
+                                  max += m;
+                                }
+                              });
+                              return max > 0 ? ((obt / max) * 100).toFixed(1) + '%' : '0%';
+                            })()}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -4553,19 +4786,26 @@ export default function TeacherDashboard({ profile }) {
                         schoolTestModal.students.forEach(student => {
                           const marksObj = {};
                           schoolTestModal.subjects.forEach(sub => {
-                            const val = marksData[`${student.id}_${sub}`];
-                            marksObj[sub] = (val === undefined || val === '') ? null : Number(val);
+                            const obtainedVal = marksData[`${student.id}_${sub}_obtained`];
+                            const maxVal = marksData[`${student.id}_${sub}_max`];
+                            if (obtainedVal !== undefined && obtainedVal !== '' && maxVal !== undefined && maxVal !== '') {
+                              marksObj[sub] = {
+                                obtained: Number(obtainedVal),
+                                max: Number(maxVal)
+                              };
+                            } else {
+                              marksObj[sub] = null;
+                            }
                           });
 
                           const newDocRef = doc(collection(db, 'school_test_marks'));
                           batchRef.set(newDocRef, {
                             batch: schoolTestModal.form.batch,
                             testType: schoolTestModal.form.testType,
-                            maxMarks: Number(schoolTestModal.form.maxMarks),
                             studentId: student.id,
                             studentName: student.studentName,
                             marks: marksObj,
-                            teacherId: profile?.id || 'unknown',
+                            teacherId: teacherId,
                             teacherName: profile?.fullName || 'Teacher',
                             createdAt: testDate
                           });
@@ -4590,6 +4830,253 @@ export default function TeacherDashboard({ profile }) {
           </div>
         </div>
       )}
+      {/* Salary Tab Dashboard */}
+      {activeTab === 'salary' && (() => {
+        // --- Smart Salary Engine ---
+        const basePay = 35000;
+        
+        // Deductions Logic
+        const dailyRate = Math.round(basePay / 30);
+        const absentDeduction = (yearlyAttendanceStats.absentDays || 0) * dailyRate;
+        
+        // Assuming an annual quota of 15 holidays
+        const annualHolidayQuota = 15;
+        const hasExceededHolidays = totalHolidaysUsed > annualHolidayQuota;
+        const extraHolidayDeduction = hasExceededHolidays ? (totalHolidaysUsed - annualHolidayQuota) * dailyRate : 0;
+        const totalDeductions = absentDeduction + extraHolidayDeduction;
+
+        // Performance Bonus Logic (from Manager Feedback)
+        let avgRating = 0;
+        if (profile?.managerFeedbacks?.length > 0) {
+          avgRating = profile.managerFeedbacks.reduce((acc, curr) => acc + Number(curr.rating || 0), 0) / profile.managerFeedbacks.length;
+        }
+        let performanceBonus = 0;
+        if (avgRating >= 4.5) performanceBonus = 2500;
+        else if (avgRating >= 4.0) performanceBonus = 1500;
+        else if (avgRating >= 3.5) performanceBonus = 500;
+        
+        // Roles & Responsibilities Allowance
+        const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
+        const classTeacherAllowance = classTeacherBatches.length > 0 ? (classTeacherBatches.length * 1500) : 0; // ₹1500 per batch managed
+
+        const totalEarnings = basePay + performanceBonus + classTeacherAllowance;
+        const netPay = totalEarnings - totalDeductions;
+
+        // Format currency
+        const inr = (num) => `₹${Math.round(num).toLocaleString('en-IN')}`;
+
+        // Donut Chart Data
+        const salaryChartData = [
+          { name: 'Base Pay', value: basePay, color: '#10b981' }, // Green
+          { name: 'Allowances', value: classTeacherAllowance, color: '#3b82f6' }, // Blue
+          { name: 'Bonus', value: performanceBonus, color: '#f59e0b' }, // Yellow
+          { name: 'Deductions', value: totalDeductions, color: '#ef4444' } // Red
+        ].filter(d => d.value > 0);
+
+        // Dummy Payslip History
+        const payslipHistory = [
+          { month: 'June 2026', gross: 38000, deductions: 0, net: 38000, status: 'Credited' },
+          { month: 'May 2026', gross: 36500, deductions: 1166, net: 35334, status: 'Credited' },
+          { month: 'April 2026', gross: 35000, deductions: 0, net: 35000, status: 'Credited' },
+        ];
+
+        return (
+        <div style={{ padding: '0 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('dashboard_hub')} style={{ padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h2 style={{ margin: 0, fontSize: 24, color: 'var(--text-primary)' }}>Salary Dashboard</h2>
+          </div>
+          
+          {/* Top Metrics Strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
+            <div className="portal-card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', border: 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Net Pay</p>
+                  <h3 style={{ margin: 0, fontSize: 28, color: 'white', fontWeight: 900 }}>{inr(netPay)}</h3>
+                </div>
+                <div style={{ padding: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 12 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#38bdf8' }}>account_balance_wallet</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="portal-card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lost to Absences</p>
+                  <h3 style={{ margin: 0, fontSize: 28, color: '#ef4444', fontWeight: 900 }}>-{inr(totalDeductions)}</h3>
+                </div>
+                <div style={{ padding: 8, background: 'rgba(239,68,68,0.1)', borderRadius: 12 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#ef4444' }}>trending_down</span>
+                </div>
+              </div>
+              <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>{yearlyAttendanceStats.absentDays} Unapproved Days</p>
+            </div>
+
+            <div className="portal-card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Performance Bonus</p>
+                  <h3 style={{ margin: 0, fontSize: 28, color: '#10b981', fontWeight: 900 }}>+{inr(performanceBonus)}</h3>
+                </div>
+                <div style={{ padding: 8, background: 'rgba(16,185,129,0.1)', borderRadius: 12 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#10b981' }}>trending_up</span>
+                </div>
+              </div>
+              <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>Based on {avgRating.toFixed(1)}⭐ Rating</p>
+            </div>
+
+            <div className="portal-card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 13, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</p>
+                  <h3 style={{ margin: 0, fontSize: 28, color: '#f59e0b', fontWeight: 900 }}>Processing</h3>
+                </div>
+                <div style={{ padding: 8, background: 'rgba(245,158,11,0.1)', borderRadius: 12 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>pending_actions</span>
+                </div>
+              </div>
+              <p style={{ margin: '8px 0 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>Disbursal on 1st of next month</p>
+            </div>
+          </div>
+
+          {/* Split View: Math & Chart */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24, marginBottom: 24 }}>
+            
+            {/* The Math */}
+            <div className="portal-card" style={{ padding: 24 }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="material-symbols-outlined" style={{ color: '#3b82f6' }}>receipt_long</span> 
+                Current Month Breakdown
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px dashed var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Base Salary</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inr(basePay)}</span>
+                </div>
+                {classTeacherAllowance > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px dashed var(--border-color)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Class Teacher Allowance</span>
+                    <span style={{ fontWeight: 600, color: '#3b82f6' }}>+{inr(classTeacherAllowance)}</span>
+                  </div>
+                )}
+                {performanceBonus > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px dashed var(--border-color)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Performance Bonus</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>+{inr(performanceBonus)}</span>
+                  </div>
+                )}
+                {totalDeductions > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px dashed var(--border-color)' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Leave Deductions</span>
+                    <span style={{ fontWeight: 600, color: '#ef4444' }}>-{inr(totalDeductions)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, marginTop: 8 }}>
+                  <span style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text-primary)' }}>Net Pay</span>
+                  <span style={{ fontSize: 24, fontWeight: 900, color: 'var(--brand-primary)' }}>{inr(netPay)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* The Visualization */}
+            <div className="portal-card" style={{ padding: 24, display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: 18, color: 'var(--text-primary)', textAlign: 'center' }}>Earnings vs Deductions</h3>
+              <div style={{ flex: 1, minHeight: 300, position: 'relative' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={salaryChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={70}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}`}
+                      labelLine={true}
+                      stroke="none"
+                    >
+                      <Label 
+                        value="Net Pay" 
+                        position="centerBottom" 
+                        dy={-10}
+                        fill="#1e293b" 
+                        style={{ fontSize: '14px', fontWeight: 'bold' }} 
+                      />
+                      <Label 
+                        value={inr(netPay)} 
+                        position="centerTop" 
+                        dy={10}
+                        fill="var(--brand-primary)" 
+                        style={{ fontSize: '20px', fontWeight: '900' }} 
+                      />
+                      {salaryChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => inr(value)}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }} 
+                      itemStyle={{ fontWeight: 'bold' }}
+                    />
+                    <Legend verticalAlign="bottom" height={24} iconType="circle" wrapperStyle={{ fontSize: '13px', fontWeight: 'bold' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Payslip History Table */}
+          <div className="portal-card" style={{ padding: 24, marginBottom: 24 }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: 18, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>history</span> 
+              Payslip Vault
+            </h3>
+            <div className="table-responsive">
+              <table className="portal-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ background: 'var(--surface-background)' }}>
+                  <tr>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--text-secondary)' }}>Month</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--text-secondary)' }}>Gross Pay</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--text-secondary)' }}>Deductions</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--text-secondary)' }}>Net Paid</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', color: 'var(--text-secondary)' }}>Status</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payslipHistory.map((slip, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '16px', fontWeight: 600 }}>{slip.month}</td>
+                      <td style={{ padding: '16px' }}>{inr(slip.gross)}</td>
+                      <td style={{ padding: '16px', color: slip.deductions > 0 ? '#ef4444' : 'inherit' }}>
+                        {slip.deductions > 0 ? `-${inr(slip.deductions)}` : '-'}
+                      </td>
+                      <td style={{ padding: '16px', fontWeight: 'bold', color: 'var(--brand-primary)' }}>{inr(slip.net)}</td>
+                      <td style={{ padding: '16px' }}>
+                        <span className="badge" style={{ background: '#dcfce7', color: '#166534' }}>{slip.status}</span>
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'center' }}>
+                        <button className="btn btn-outline btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span> PDF
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+        </div>
+        );
+      })()}
 
       {/* Global Ticket Drawer for Teachers */}
       <TicketDrawer 
