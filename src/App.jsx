@@ -18,6 +18,7 @@ import Batches from './pages/Batches';
 import FeesLedger from './pages/FeesLedger';
 import DemoDashboard from './pages/DemoDashboard';
 import StudentsDirectory from './pages/StudentsDirectory';
+import CommunicationLog from './pages/CommunicationLog';
 import './index.css';
 
 import TopActions from './components/TopActions';
@@ -146,6 +147,14 @@ export default function App() {
               <ProtectedRoute>
                 <PortalLayout>
                   <StudentsDirectory />
+                </PortalLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/communication-log" element={
+              <ProtectedRoute allowedRoles={['admin', 'service_manager', 'branch_manager']}>
+                <PortalLayout>
+                  <CommunicationLog />
                 </PortalLayout>
               </ProtectedRoute>
             } />

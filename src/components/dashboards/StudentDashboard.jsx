@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, serverTimestamp, doc, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { createNotification } from '../../services/notifications';
 import TabPerformance from '../StudentPortfolio/TabPerformance';
@@ -35,6 +35,7 @@ export default function StudentDashboard({ profile }) {
   const [battalionProfile, setBattalionProfile] = useState(null);
   const [studentRecord, setStudentRecord] = useState(null);
   const [lectureReports, setLectureReports] = useState([]);
+  const [directCommunications, setDirectCommunications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [submitForm, setSubmitForm] = useState({
@@ -209,6 +210,36 @@ export default function StudentDashboard({ profile }) {
       }
     });
 
+    // 8. Listen to Direct Communications & Attendance Warnings
+    const studentNameLower = (profile?.fullName || profile?.displayName || profile?.studentName || '').trim().toLowerCase();
+    const studentEmail = (profile?.email || '').toLowerCase().trim();
+    const sId = profile?.studentId || profile?.uid || studentRecord?.id;
+
+    const qComm = collection(db, 'student_communications');
+    const unsubComm = onSnapshot(qComm, (snap) => {
+      const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(item => {
+        const itemSid = item.studentId;
+        const itemSName = (item.studentName || '').toLowerCase().trim();
+        const itemSEmail = (item.studentEmail || '').toLowerCase().trim();
+        const itemBatch = item.batch;
+
+        return (
+          (sId && itemSid === sId) ||
+          (studentNameLower && itemSName === studentNameLower) ||
+          (studentEmail && itemSEmail === studentEmail) ||
+          (batchName && itemBatch === batchName && !itemSid)
+        );
+      });
+
+      msgs.sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
+      setDirectCommunications(msgs);
+    });
+
     setLoading(false);
     return () => { 
       if (unsubMat) unsubMat(); 
@@ -219,8 +250,20 @@ export default function StudentDashboard({ profile }) {
       unsubTeachers(); 
       unsubStudent(); 
       unsubBattalion(); 
+      unsubComm();
     };
   }, [batchName, profile?.studentId, profile?.uid, profile?.email, profile?.fullName, profile?.displayName, profile?.studentName, studentRecord?.id, studentRecord?.battalionEnrolled]);
+
+  const handleAcknowledgeNotice = async (noticeId) => {
+    try {
+      await updateDoc(doc(db, 'student_communications', noticeId), {
+        readByStudent: true,
+        acknowledgedAt: new Date()
+      });
+    } catch (err) {
+      console.error("Failed to acknowledge notice:", err);
+    }
+  };
 
   const handleSubmitAssignment = async (e) => {
     e.preventDefault();
@@ -310,8 +353,9 @@ export default function StudentDashboard({ profile }) {
     return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
   });
 
+  const unreadNoticesCount = directCommunications.filter(c => !c.readByStudent).length;
   const performanceBadge = allFeedbacks.length;
-  const noticeBadge = pendingPtms.length + recentTests.length;
+  const noticeBadge = pendingPtms.length + recentTests.length + unreadNoticesCount;
 
   useEffect(() => {
     const event = new CustomEvent('updateSidebarBadges', { 
@@ -393,10 +437,48 @@ export default function StudentDashboard({ profile }) {
                 </div>
 
                 {/* 2. Action Center */}
-                {(pendingPtms.length > 0 || allFeedbacks.length > 0) && (
+                {(pendingPtms.length > 0 || allFeedbacks.length > 0 || unreadNoticesCount > 0) && (
                   <div>
                     <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--text-secondary)' }}>Action Center</h3>
                     <div className="grid-auto-300" style={{ gap: '16px' }}>
+                      {/* Urgent Direct Teacher Communications & Alerts */}
+                      {directCommunications.filter(c => !c.readByStudent).slice(0, 2).map((comm) => (
+                        <div key={comm.id} style={{ 
+                          background: comm.type === 'attendance_alert' ? '#fef2f2' : '#f0f9ff', 
+                          border: `1px solid ${comm.type === 'attendance_alert' ? '#fecaca' : '#bae6fd'}`, 
+                          padding: '16px', 
+                          borderRadius: '12px', 
+                          display: 'flex', 
+                          gap: '12px',
+                          alignItems: 'flex-start'
+                        }}>
+                          <span className="material-symbols-outlined" style={{ color: comm.type === 'attendance_alert' ? '#dc2626' : 'var(--brand-primary)', fontSize: '24px' }}>
+                            {comm.type === 'attendance_alert' ? 'warning' : 'campaign'}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <strong style={{ color: comm.type === 'attendance_alert' ? '#991b1b' : 'var(--brand-primary)', fontSize: 14 }}>
+                                {comm.subject || 'Direct Teacher Advisory'}
+                              </strong>
+                              <span className="badge" style={{ background: comm.type === 'attendance_alert' ? '#dc2626' : 'var(--brand-primary)', color: '#fff', fontSize: 10 }}>NEW</span>
+                            </div>
+                            <p style={{ fontSize: '13px', color: comm.type === 'attendance_alert' ? '#b91c1c' : 'var(--text-primary)', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+                              "{comm.message}"
+                            </p>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>By {comm.teacherName}</span>
+                              <button 
+                                className="btn-ghost" 
+                                style={{ fontSize: 11, padding: '2px 8px', color: comm.type === 'attendance_alert' ? '#dc2626' : 'var(--brand-primary)', fontWeight: 600 }}
+                                onClick={() => handleAcknowledgeNotice(comm.id)}
+                              >
+                                Mark as Read
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
                       {pendingPtms.map((ptm, i) => (
                         <div key={`ptm-${i}`} style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '12px', display: 'flex', gap: '12px' }}>
                           <span className="material-symbols-outlined" style={{ color: '#d97706', fontSize: '24px' }}>warning</span>
@@ -1087,6 +1169,93 @@ export default function StudentDashboard({ profile }) {
                 <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>rate_review</span>
                 Teacher Feeds & Notices
               </h2>
+
+              {/* 1. Direct Faculty Communications & Attendance Notices */}
+              <div className="portal-card" style={{ borderTop: '4px solid var(--brand-primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ margin: 0, color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined">outgoing_mail</span>
+                    Faculty Advisories & Attendance Notices
+                  </h3>
+                  {unreadNoticesCount > 0 && (
+                    <span className="badge" style={{ background: '#dc2626', color: '#fff', fontWeight: 600 }}>
+                      {unreadNoticesCount} Unread
+                    </span>
+                  )}
+                </div>
+
+                {directCommunications.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic', margin: 0 }}>
+                    No faculty notices or attendance alerts recorded yet.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {directCommunications.map((comm) => {
+                      const isAlert = comm.type === 'attendance_alert';
+                      const dateStr = comm.createdAt?.toDate 
+                        ? comm.createdAt.toDate().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+                        : (comm.createdAt?.seconds ? new Date(comm.createdAt.seconds * 1000).toLocaleString() : 'Recent');
+
+                      return (
+                        <div 
+                          key={comm.id} 
+                          style={{ 
+                            padding: 16, 
+                            background: isAlert ? '#fff5f5' : 'var(--surface-bg)', 
+                            borderRadius: 10, 
+                            border: `1px solid ${isAlert ? '#fed7d7' : 'var(--surface-border)'}`,
+                            boxShadow: isAlert ? '0 2px 8px rgba(220, 38, 38, 0.08)' : 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className="material-symbols-outlined" style={{ color: isAlert ? '#dc2626' : 'var(--brand-primary)', fontSize: 20 }}>
+                                {isAlert ? 'warning' : 'mark_chat_read'}
+                              </span>
+                              <strong style={{ fontSize: 15, color: isAlert ? '#991b1b' : 'var(--text-primary)' }}>
+                                {comm.subject || 'Faculty Notice'}
+                              </strong>
+                              {isAlert && (
+                                <span className="badge" style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>
+                                  ATTENDANCE ALERT
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{dateStr}</span>
+                              {comm.readByStudent ? (
+                                <span className="badge" style={{ background: '#e2e8f0', color: '#475569', fontSize: 11 }}>Read</span>
+                              ) : (
+                                <button 
+                                  className="btn btn-sm" 
+                                  style={{ padding: '4px 10px', fontSize: 12, background: isAlert ? '#dc2626' : 'var(--brand-primary)', color: '#fff', border: 'none' }}
+                                  onClick={() => handleAcknowledgeNotice(comm.id)}
+                                >
+                                  Acknowledge Notice
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <p style={{ margin: '8px 0', fontSize: 14, color: isAlert ? '#7f1d1d' : 'var(--text-primary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                            {comm.message}
+                          </p>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${isAlert ? '#fecaca' : 'var(--surface-border)'}`, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            <span><strong>Sent By:</strong> {comm.teacherName} ({comm.teacherEmail || 'Faculty'})</span>
+                            {comm.meta?.attendancePercent !== undefined && (
+                              <span style={{ color: comm.meta.attendancePercent < 75 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                                Attendance Metric: {comm.meta.attendancePercent}% ({comm.meta.attendedClasses || 0}/{comm.meta.totalClasses || 0} classes)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               
               {/* Recent Test Results */}
               <div className="portal-card" style={{ borderTop: '4px solid #f59e0b' }}>

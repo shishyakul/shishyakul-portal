@@ -29,6 +29,7 @@ const NAV_CONFIG = {
     { to: '/fees',        icon: 'payments',        label: 'Fees Ledger' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
   ],
   branch_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -39,6 +40,7 @@ const NAV_CONFIG = {
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
+    { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
   ],
   service_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -46,6 +48,7 @@ const NAV_CONFIG = {
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
+    { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
   ],
   front_desk_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
