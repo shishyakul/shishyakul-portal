@@ -93,13 +93,13 @@ export default function TopActions({ onMenuClick }) {
         <button 
           className="btn-icon mobile-only" 
           onClick={onMenuClick}
-          style={{ background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}
         >
           <span className="material-symbols-outlined">menu</span>
         </button>
 
         {/* Right Actions Container */}
-        <div style={{ display: 'flex', gap: 16, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 16, marginLeft: 'auto', pointerEvents: 'auto' }}>
           {(!isStudentOrTeacher || profile?.role === 'branch_manager' || profile?.role === 'service_manager') && (
             <button 
               onClick={() => setIsTicketOpen(!isTicketOpen)}

@@ -428,12 +428,13 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 .top-actions-container {
   position: fixed;
   top: 24px;
-  left: 32px;
+  left: calc(var(--sidebar-width) + 32px);
   right: 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   z-index: 999;
+  pointer-events: none;
 }
 
 @media (max-width: 768px) {
@@ -511,3 +512,94 @@ button { cursor: pointer; font-family: var(--font-body); border: none; outline: 
 }
 .empty-state .material-symbols-outlined { font-size: 48px; opacity: 0.4; }
 .empty-state p { font-size: 14px; }
+
+/* ── Timeline Track & Nodes ── */
+.timeline-container {
+  position: relative;
+  padding-left: 32px;
+  margin-top: 10px;
+}
+.timeline-container::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 6px;
+  bottom: 0;
+  width: 2px;
+  background: var(--surface-border);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+}
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+.timeline-node {
+  position: absolute;
+  left: -26px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-bg);
+  border: 3px solid var(--brand-primary);
+  z-index: 1;
+}
+.timeline-card {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  transition: all 0.2s ease;
+}
+.timeline-card:hover {
+  border-color: rgba(253, 180, 42, 0.4);
+  box-shadow: 0 4px 12px rgba(253, 180, 42, 0.05);
+}
+
+/* ── Pipeline Stage Card Styles ── */
+.pipeline-column {
+  background: var(--surface-elevated);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 250px;
+}
+.pipeline-column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--surface-border);
+  margin-bottom: 4px;
+}
+.pipeline-stage-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+.pipeline-stage-badge {
+  font-size: 10px;
+  background: var(--surface-border);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 20px;
+  font-weight: 700;
+}
+.pipeline-item-card {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+.pipeline-item-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}

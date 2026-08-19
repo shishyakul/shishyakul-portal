@@ -44,6 +44,7 @@ export default function Faculty() {
     subjects: ['Mathematics', 'Science', 'SST', 'English', 'Hindi', 'Marathi', 'Sanskrit'],
     chapters: {}
   });
+  const [selectedConfigSubject, setSelectedConfigSubject] = useState('');
 
   useEffect(() => {
     // 0. Listen to Active Teachers
@@ -160,6 +161,29 @@ export default function Faculty() {
     }
   };
 
+  const handleDeleteSubject = async (subject) => {
+    if (!confirm(`Are you sure you want to delete the subject "${subject}"? All associated chapter details will be removed.`)) return;
+    const updatedSubjects = (timetableSettings.subjects || []).filter(s => s !== subject);
+    const updatedChapters = { ...(timetableSettings.chapters || {}) };
+    delete updatedChapters[subject];
+    await updateDoc(doc(db, 'timetable_settings', 'defaults'), {
+      subjects: updatedSubjects,
+      chapters: updatedChapters
+    });
+    if (selectedConfigSubject === subject) {
+      setSelectedConfigSubject('');
+    }
+  };
+
+  const handleDeleteChapter = async (subject, chapter) => {
+    if (!confirm(`Are you sure you want to delete the chapter "${chapter}" from "${subject}"?`)) return;
+    const updatedChapters = { ...(timetableSettings.chapters || {}) };
+    if (updatedChapters[subject]) {
+      updatedChapters[subject] = updatedChapters[subject].filter(c => c !== chapter);
+      await updateDoc(doc(db, 'timetable_settings', 'defaults'), { chapters: updatedChapters });
+    }
+  };
+
   const handleOpenProgress = (item) => {
     setProgressItemId(item.id);
     setNewProgressVal(item.progress);
@@ -206,13 +230,23 @@ export default function Faculty() {
 
   const handleResolveGrievance = async (id, currentStatus) => {
     const nextStatus = currentStatus === 'Pending' ? 'Resolved' : 'Pending';
+    let remark = '';
+    
+    if (nextStatus === 'Resolved') {
+      const input = prompt("Enter a resolution note/remark for the faculty (optional):");
+      if (input === null) return; // User cancelled
+      remark = input.trim();
+    }
+
     try {
       await updateDoc(doc(db, 'faculty_grievances', id), {
-        status: nextStatus
+        status: nextStatus,
+        resolutionRemark: remark || null,
+        resolvedAt: nextStatus === 'Resolved' ? serverTimestamp() : null
       });
     } catch (err) {
       console.error(err);
-      alert('Failed to toggle status.');
+      alert('Failed to update grievance status.');
     }
   };
 
@@ -568,8 +602,112 @@ export default function Faculty() {
         </div>
       </div>
 
+      {/* Curriculum & Settings Builder Panel */}
+      <div className="portal-card" style={{ marginTop: '28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>⚙️ Curriculum & Settings Builder</h2>
+            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Manage course curriculum, active subjects, and chapters dynamically.</p>
+          </div>
+        </div>
+        
+        <div className="curriculum-grid">
+          {/* Left panel: list of subjects */}
+          <div className="curriculum-subject-list">
+            <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.05em' }}>Subjects</div>
+            {(timetableSettings.subjects || []).map(sub => (
+              <button 
+                key={sub}
+                onClick={() => setSelectedConfigSubject(sub)}
+                className={`curriculum-subject-btn ${selectedConfigSubject === sub ? 'active' : ''}`}
+                style={{ width: '100%' }}
+              >
+                <span>{sub}</span>
+                <span 
+                  className="material-symbols-outlined" 
+                  style={{ fontSize: '16px', color: selectedConfigSubject === sub ? '#1a0e00' : 'var(--text-muted)', cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSubject(sub);
+                  }}
+                  title={`Delete ${sub}`}
+                >
+                  delete
+                </span>
+              </button>
+            ))}
+            <button 
+              className="btn btn-ghost btn-sm" 
+              onClick={handleAddSubject}
+              style={{ marginTop: '8px', justifyContent: 'center' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+              Add Subject
+            </button>
+          </div>
+
+          {/* Right panel: chapters of selected subject */}
+          <div className="curriculum-chapter-panel">
+            {selectedConfigSubject ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--surface-border)', paddingBottom: '10px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--text-primary)' }}>{selectedConfigSubject} Chapters</h3>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>Manage lesson structures for this subject.</p>
+                  </div>
+                  <button 
+                    className="btn btn-brand btn-sm" 
+                    onClick={() => handleAddChapter(selectedConfigSubject)}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+                    Add Chapter
+                  </button>
+                </div>
+
+                <div className="curriculum-chip-container">
+                  {!(timetableSettings.chapters?.[selectedConfigSubject] && timetableSettings.chapters[selectedConfigSubject].length > 0) ? (
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '10px 0' }}>
+                      No chapters added to this subject yet.
+                    </div>
+                  ) : (
+                    timetableSettings.chapters[selectedConfigSubject].map((chap) => (
+                      <div key={chap} className="curriculum-chapter-chip">
+                        <span>{chap}</span>
+                        <div style={{ display: 'flex', gap: '8px', marginLeft: '6px' }}>
+                          <span 
+                            className="material-symbols-outlined" 
+                            style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            onClick={() => handleEditChapter(selectedConfigSubject, chap)}
+                            title="Rename"
+                          >
+                            edit
+                          </span>
+                          <span 
+                            className="material-symbols-outlined" 
+                            style={{ fontSize: '14px', color: 'var(--status-error)', cursor: 'pointer' }}
+                            onClick={() => handleDeleteChapter(selectedConfigSubject, chap)}
+                            title="Delete"
+                          >
+                            delete
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '180px', color: 'var(--text-muted)', gap: '10px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '40px', opacity: 0.5 }}>menu_book</span>
+                <span style={{ fontSize: '13px' }}>Select a subject from the left panel to configure its chapter contents.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Syllabus Tracking Section */}
-      <div className="portal-card syllabus-tracker-card">
+      <div className="portal-card syllabus-tracker-card" style={{ marginTop: '28px' }}>
         <h2>📚 Academic Syllabus Tracker</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>Monitor syllabus completion percentages for batches and subjects.</p>
         
@@ -584,7 +722,16 @@ export default function Faculty() {
                     <h3>{syl.batch} - {syl.subject}</h3>
                     <p className="teacher-desc">Faculty: {syl.teacher}</p>
                   </div>
-                  <div className="syllabus-progress-amount">{syl.progress}%</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="syllabus-progress-amount">{syl.progress}%</div>
+                    {syl.progress < 40 ? (
+                      <span className="syllabus-health-badge behind">⚠️ Behind</span>
+                    ) : syl.progress > 80 ? (
+                      <span className="syllabus-health-badge advanced">🌟 Advanced</span>
+                    ) : (
+                      <span className="syllabus-health-badge ontrack">✅ On Track</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="syllabus-progress-bar-bg">
@@ -633,7 +780,14 @@ export default function Faculty() {
                         {g.priority}
                       </span>
                     </td>
-                    <td>{g.request}</td>
+                    <td>
+                      <div>{g.request}</div>
+                      {g.status === 'Resolved' && g.resolutionRemark && (
+                        <div className="resolution-remark-box">
+                          <strong>Note:</strong> {g.resolutionRemark}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <span className={`status-tag ${g.status.toLowerCase()}`}>
                         {g.status}

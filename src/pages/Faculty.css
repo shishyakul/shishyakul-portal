@@ -297,3 +297,114 @@
   border: 1px solid rgba(239, 68, 68, 0.15);
 }
 
+/* ── Curriculum & Settings Builder Panel ── */
+.curriculum-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  margin-top: 16px;
+}
+@media (max-width: 768px) {
+  .curriculum-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.curriculum-subject-list {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.curriculum-subject-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+.curriculum-subject-btn:hover {
+  border-color: var(--brand-primary);
+  background: rgba(253, 180, 42, 0.04);
+}
+.curriculum-subject-btn.active {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #1a0e00;
+}
+.curriculum-chapter-panel {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.curriculum-chip-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.curriculum-chapter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.curriculum-chapter-chip:hover {
+  border-color: rgba(253, 180, 42, 0.5);
+}
+
+/* ── Grievance Resolution Remarks ── */
+.resolution-remark-box {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--surface-bg);
+  border: 1px dashed var(--surface-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ── Syllabus Progress Badges ── */
+.syllabus-health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.syllabus-health-badge.behind {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--status-error);
+}
+.syllabus-health-badge.ontrack {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--status-success);
+}
+.syllabus-health-badge.advanced {
+  background: rgba(253, 180, 42, 0.15);
+  color: var(--brand-primary-dark);
+}
+
