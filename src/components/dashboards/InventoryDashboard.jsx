@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
+import PersonalAttendance from './shared/PersonalAttendance';
+import PersonalSalary from './shared/PersonalSalary';
 
 export default function InventoryDashboard({ profile }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = location.hash.replace('#', '');
   
   const [stats, setStats] = useState({
     totalCatalogItems: 0,
@@ -50,6 +54,13 @@ export default function InventoryDashboard({ profile }) {
       unsubLog();
     };
   }, []);
+
+  if (activeTab === 'personal_attendance') {
+    return <PersonalAttendance profile={profile} />;
+  }
+  if (activeTab === 'personal_salary') {
+    return <PersonalSalary profile={profile} />;
+  }
 
   if (loading) return <div className="empty-state"><div className="spinner"/></div>;
 

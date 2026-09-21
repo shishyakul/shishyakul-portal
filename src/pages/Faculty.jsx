@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, addDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { BATCH_DEF } from './Batches';
 import './Faculty.css';
@@ -288,7 +288,55 @@ export default function Faculty() {
         headerDate: timetableHeaderDate,
         updatedAt: serverTimestamp()
       });
-      alert(`Master Timetable published successfully to all dashboards!`);
+
+      // Helper to compute Saturday date string matching Teacher & Service Manager contracts
+      const parseStartDate = (hdr) => {
+        if (!hdr) return new Date();
+        const parts = hdr.split(' TO ');
+        if (parts.length > 0) {
+          const p = parts[0].trim().split('/');
+          if (p.length === 3) {
+            const year = p[2].length === 2 ? '20' + p[2] : p[2];
+            return new Date(`${year}-${p[1]}-${p[0]}`);
+          }
+        }
+        const d = new Date(hdr);
+        return !isNaN(d.getTime()) ? d : new Date();
+      };
+      const stDate = parseStartDate(timetableHeaderDate);
+      const sat = new Date(stDate);
+      sat.setDate(sat.getDate() + 5);
+      const satDayStr = `${sat.getDate().toString().padStart(2, '0')}/${(sat.getMonth() + 1).toString().padStart(2, '0')}/${sat.getFullYear().toString().slice(-2)}`;
+
+      // Auto-seed test_workflows for all test duties in the timetable
+      let seededCount = 0;
+      for (const slot of Object.keys(timetableData)) {
+        for (const room of Object.keys(timetableData[slot] || {})) {
+          const cell = timetableData[slot][room];
+          if (cell?.test && (cell.test.topic || cell.test.preparedBy || cell.test.checkedBy)) {
+            const testId = `${satDayStr.replace(/\//g, '-')}_${cell.batch}`;
+            const testRef = doc(db, 'test_workflows', testId);
+            const existingDoc = await getDoc(testRef);
+
+            if (!existingDoc.exists()) {
+              await setDoc(testRef, {
+                testId,
+                batch: cell.batch,
+                subject: cell.thursSat?.subject || cell.monWed?.subject || 'Weekly Test',
+                topic: cell.test.topic || 'Weekly Saturday Exam',
+                preparedBy: cell.test.preparedBy || '',
+                checkedBy: cell.test.checkedBy || '',
+                status: 'draft_pending',
+                testDate: satDayStr,
+                createdAt: new Date().toISOString()
+              });
+              seededCount++;
+            }
+          }
+        }
+      }
+
+      alert(`Master Timetable published successfully! (${seededCount > 0 ? `${seededCount} test duties seeded to Test Board` : 'Test workflows synced'})`);
     } catch(err) {
       alert("Failed to publish timetable: " + err.message);
     }

@@ -295,9 +295,41 @@ export default function ServiceManagerDashboard({ profile }) {
   });
 
   // Workflows
-  const drafted = testWorkflows.filter(t => t.status === 'draft_submitted');
-  const published = testWorkflows.filter(t => t.status === 'final_published');
+  const drafted = testWorkflows.filter(t => t.status === 'draft_pending' || t.status === 'draft_submitted' || t.status === 'drafted');
+  const published = testWorkflows.filter(t => t.status === 'final_published' || t.status === 'published');
   const graded = testWorkflows.filter(t => t.status === 'graded');
+
+  // Leave Requests
+  const pendingLeaves = leaveRequests.filter(r => r.status === 'pending');
+
+  const handleApproveLeave = async (reqId) => {
+    try {
+      await updateDoc(doc(db, 'leave_requests', reqId), {
+        status: 'approved',
+        reviewedBy: profile?.fullName || profile?.name || 'Rohan Sir (Service Manager)',
+        reviewedAt: new Date().toISOString()
+      });
+      alert("Faculty leave request approved.");
+    } catch (err) {
+      alert("Error approving leave: " + err.message);
+    }
+  };
+
+  const handleRejectLeave = async (reqId) => {
+    const remark = prompt("Enter rejection note/reason (optional):");
+    if (remark === null) return; // User cancelled
+    try {
+      await updateDoc(doc(db, 'leave_requests', reqId), {
+        status: 'rejected',
+        reviewRemarks: remark.trim() || 'Declined by Academic Manager',
+        reviewedBy: profile?.fullName || profile?.name || 'Rohan Sir (Service Manager)',
+        reviewedAt: new Date().toISOString()
+      });
+      alert("Faculty leave request rejected.");
+    } catch (err) {
+      alert("Error rejecting leave: " + err.message);
+    }
+  };
 
   const handleResolvePTM = async (studentId, createdAt, teacherId) => {
     try {
@@ -801,6 +833,69 @@ export default function ServiceManagerDashboard({ profile }) {
                       </div>
                     );
                   })
+                )}
+              </div>
+            </div>
+
+            {/* Faculty Leave Approvals Tray */}
+            <div className="portal-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <h2 style={{ fontSize: 15, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>flight_takeoff</span>
+                  Faculty Leave Approvals
+                </h2>
+                {pendingLeaves.length > 0 && (
+                  <span className="badge" style={{ background: '#fef3c7', color: '#b45309', fontSize: 11, fontWeight: 700 }}>
+                    {pendingLeaves.length} Pending
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '280px', overflowY: 'auto' }}>
+                {pendingLeaves.length === 0 ? (
+                  <div style={{ padding: '16px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                    ✓ All faculty leave requests reviewed.
+                  </div>
+                ) : (
+                  pendingLeaves.map(req => (
+                    <div key={req.id} style={{ background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{req.teacherName || 'Faculty Member'}</strong>
+                          <span style={{ marginLeft: 6, fontSize: 10, background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>
+                            {req.type || 'Leave'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-primary-dark)' }}>
+                          {req.totalDays || 1}d
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        📅 {req.startDate} ➔ {req.endDate}
+                      </div>
+                      {req.reason && (
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', background: '#fff', padding: '6px 8px', borderRadius: 4, border: '1px solid #f1f5f9' }}>
+                          "{req.reason}"
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <button
+                          onClick={() => handleApproveLeave(req.id)}
+                          className="btn btn-sm"
+                          style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectLeave(req.id)}
+                          className="btn btn-sm"
+                          style={{ flex: 1, background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>

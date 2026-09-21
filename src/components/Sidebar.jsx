@@ -30,6 +30,8 @@ const NAV_CONFIG = {
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   branch_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -41,6 +43,8 @@ const NAV_CONFIG = {
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
     { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   service_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -49,6 +53,8 @@ const NAV_CONFIG = {
     { to: '/attendance',  icon: 'event_available', label: 'Attendance' },
     { to: '/users',       icon: 'group',           label: 'Manage Teachers' },
     { to: '/communication-log', icon: 'mark_chat_read', label: 'Communication Log' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   front_desk_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
@@ -57,10 +63,14 @@ const NAV_CONFIG = {
     { to: '/students',    icon: 'school',          label: 'Students' },
     { to: '/attendance',  icon: 'event_available', label: 'Daily Attendance' },
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   inventory_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
     { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   teacher: [
     { to: '/dashboard#home',      icon: 'dashboard',            label: 'Dashboard' },

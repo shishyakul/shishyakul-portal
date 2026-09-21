@@ -491,6 +491,15 @@ export default function TeacherDashboard({ profile }) {
   const [testFilter, setTestFilter] = useState({ batch: 'All', type: 'All' });
   const [viewTestRecord, setViewTestRecord] = useState(null);
   const [viewTestRecordStudents, setViewTestRecordStudents] = useState([]);
+  const [gradingTab, setGradingTab] = useState('tests'); // 'tests' | 'submissions'
+  const [submissionFilter, setSubmissionFilter] = useState({ batch: 'All', status: 'All' });
+  const [gradeSubmissionModal, setGradeSubmissionModal] = useState({ isOpen: false, submission: null, marks: '', feedback: '' });
+
+  // Faculty Coordination & Real Salary History
+  const [facultyGrievances, setFacultyGrievances] = useState([]);
+  const [coordinationModal, setCoordinationModal] = useState({ isOpen: false, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false });
+  const [realSalaryHistory, setRealSalaryHistory] = useState([]);
+  const [payslipModal, setPayslipModal] = useState({ isOpen: false, slip: null });
 
   // --- Class Teacher Hub Widget Modals ---
   const [activeWidgetModal, setActiveWidgetModal] = useState(null); // 'enrolled', 'attendance', 'performance', 'top', 'attention', 'exams'
@@ -859,19 +868,24 @@ export default function TeacherDashboard({ profile }) {
       setFacultyMap(map);
     });
 
-    // 1. Listen to Course Materials (only if assigned batches exist)
+    // 1. Listen to Course Materials & Submissions across all teacher batches
+    const teacherBatches = Array.from(new Set([
+      ...(Array.isArray(profile?.assignedBatches) ? profile.assignedBatches : []),
+      ...(Array.isArray(profile?.batches) ? profile.batches : []),
+      ...(Array.isArray(profile?.classTeacherBatch) ? profile.classTeacherBatch : [])
+    ])).filter(Boolean);
+
     let unsubMat = () => { };
-    if (profile?.assignedBatches?.length > 0) {
-      const qMat = query(collection(db, 'course_materials'), where('batch', 'in', profile.assignedBatches));
+    let unsubSub = () => { };
+
+    if (teacherBatches.length > 0) {
+      const targetBatches = teacherBatches.slice(0, 30);
+      const qMat = query(collection(db, 'course_materials'), where('batch', 'in', targetBatches));
       unsubMat = onSnapshot(qMat, (snap) => {
         setMaterials(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.timestamp - a.timestamp));
       });
-    }
 
-    // 2. Listen to Submissions (only if assigned batches exist)
-    let unsubSub = () => { };
-    if (profile?.assignedBatches?.length > 0) {
-      const qSub = query(collection(db, 'submissions'), where('batch', 'in', profile.assignedBatches));
+      const qSub = query(collection(db, 'submissions'), where('batch', 'in', targetBatches));
       unsubSub = onSnapshot(qSub, (snap) => {
         setSubmissions(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.timestamp - a.timestamp));
       });
@@ -914,6 +928,8 @@ export default function TeacherDashboard({ profile }) {
     // 7. Listen to Test Records
     let unsubTestRecords = () => { };
     let unsubSchoolTestRecords = () => { };
+    let unsubFacultyGrievances = () => { };
+    let unsubSalary = () => { };
     if (teacherId) {
       const qTestRecords = query(collection(db, 'test_marks'), where('uploadedBy', '==', teacherId));
       unsubTestRecords = onSnapshot(qTestRecords, (snap) => {
@@ -973,6 +989,20 @@ export default function TeacherDashboard({ profile }) {
         });
         setSchoolTestRecords(Object.values(grouped).sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)));
       });
+
+      const qGriev = query(collection(db, 'faculty_grievances'), where('teacherId', '==', teacherId));
+      unsubFacultyGrievances = onSnapshot(qGriev, (snap) => {
+        const grs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        grs.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+        setFacultyGrievances(grs);
+      });
+
+      const qSal = query(collection(db, 'salary_history'), where('teacherId', '==', teacherId));
+      unsubSalary = onSnapshot(qSal, (snap) => {
+        const sals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        sals.sort((a,b) => (b.monthCode || '').localeCompare(a.monthCode || ''));
+        setRealSalaryHistory(sals);
+      });
     }
 
     setLoading(false);
@@ -986,8 +1016,35 @@ export default function TeacherDashboard({ profile }) {
       unsubWorkflows();
       unsubTestRecords();
       unsubSchoolTestRecords();
+      unsubFacultyGrievances();
+      unsubSalary();
     };
   }, [profile?.assignedBatches, teacherId]);
+
+  const handleCreateCoordinationTicket = async () => {
+    if (!coordinationModal.request.trim()) {
+      return alert("Please enter the coordination request details.");
+    }
+    setCoordinationModal(prev => ({ ...prev, submitting: true }));
+    try {
+      await addDoc(collection(db, 'faculty_grievances'), {
+        teacherId: teacherId,
+        teacherName: teacherName,
+        category: coordinationModal.category,
+        request: `[${coordinationModal.category}] ${coordinationModal.request.trim()}`,
+        priority: coordinationModal.priority,
+        status: 'Pending',
+        timestamp: serverTimestamp(),
+        createdAt: new Date().toISOString()
+      });
+      alert("Coordination ticket submitted to Rohan Sir (Service Manager)!");
+      setCoordinationModal({ isOpen: false, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to submit coordination ticket: " + err.message);
+      setCoordinationModal(prev => ({ ...prev, submitting: false }));
+    }
+  };
 
   const handlePostMaterial = async (e) => {
     e.preventDefault();
@@ -1007,13 +1064,17 @@ export default function TeacherDashboard({ profile }) {
     }
   };
 
-  const handleGradeSubmission = async (subId, marks) => {
+  const handleGradeSubmission = async (subId, marks, feedback = '') => {
     try {
       await updateDoc(doc(db, 'submissions', subId), {
         marks: Number(marks),
+        feedback: feedback ? feedback.trim() : '',
         graded: true,
-        gradedAt: serverTimestamp()
+        gradedAt: serverTimestamp(),
+        gradedBy: profile?.fullName || 'Faculty'
       });
+      alert('Grade and feedback saved successfully!');
+      setGradeSubmissionModal({ isOpen: false, submission: null, marks: '', feedback: '' });
     } catch (err) {
       console.error(err);
       alert('Failed to save grade');
@@ -1311,6 +1372,18 @@ export default function TeacherDashboard({ profile }) {
 
           <button
             className="btn btn-ghost"
+            onClick={() => setCoordinationModal({ isOpen: true, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false })}
+            style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: '1px solid var(--surface-border)', background: 'white', transition: 'transform 0.2s', position: 'relative' }}
+            title="Academic Coordination / Report Issue to Rohan Sir"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f59e0b' }}>support_agent</span>
+            {facultyGrievances.filter(g => g.status === 'Pending').length > 0 && (
+              <span style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, background: '#ef4444', borderRadius: '50%', border: '2px solid white' }} />
+            )}
+          </button>
+
+          <button
+            className="btn btn-ghost"
             onClick={() => setIProfileOpen(true)}
             style={{ width: 42, height: 42, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: '1px solid var(--surface-border)', background: 'white', transition: 'transform 0.2s' }}
             title="Profile"
@@ -1454,6 +1527,16 @@ export default function TeacherDashboard({ profile }) {
                           <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>
                             {req.startDate} to {req.endDate} ({req.totalDays} Days)
                           </p>
+                          {req.reviewRemarks && (
+                            <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#475569', fontStyle: 'italic' }}>
+                              Note: {req.reviewRemarks} {req.reviewedBy ? `(${req.reviewedBy})` : ''}
+                            </p>
+                          )}
+                          {!req.reviewRemarks && req.reviewedBy && (
+                            <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#64748b' }}>
+                              Reviewed by {req.reviewedBy}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <span style={{
@@ -1464,6 +1547,51 @@ export default function TeacherDashboard({ profile }) {
                             {req.status === 'approved' ? 'Approved' : req.status === 'rejected' ? 'Rejected' : 'Pending'}
                           </span>
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Academic Coordination & Issue Tickets */}
+              {facultyGrievances.length > 0 && (
+                <div style={{ background: '#ffffff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 18, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>support_agent</span>
+                      Academic Coordination Tickets
+                    </h3>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setCoordinationModal({ isOpen: true, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false })}
+                      style={{ fontSize: 11, color: 'var(--brand-primary)', fontWeight: 600 }}
+                    >
+                      + New Ticket
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {facultyGrievances.map(ticket => (
+                      <div key={ticket.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                            {ticket.category || 'Coordination'}
+                          </span>
+                          <span style={{
+                            padding: '3px 8px', borderRadius: '12px', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase',
+                            background: ticket.status === 'Resolved' ? '#dcfce7' : '#fef3c7',
+                            color: ticket.status === 'Resolved' ? '#15803d' : '#b45309'
+                          }}>
+                            {ticket.status}
+                          </span>
+                        </div>
+                        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#334155' }}>
+                          {ticket.request}
+                        </p>
+                        {ticket.resolutionRemark && (
+                          <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', padding: '6px 10px', borderRadius: 6, borderLeft: '3px solid #10b981', marginTop: 4 }}>
+                            <strong>Rohan Sir:</strong> {ticket.resolutionRemark}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2476,7 +2604,7 @@ export default function TeacherDashboard({ profile }) {
                   <h3 style={{ margin: 0, fontSize: 20 }}>{selectedMetric} Summary</h3>
                 </div>
                 {selectedMetric === 'Feedbacks' && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('feedback')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('feedbacks')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
                 )}
                 {selectedMetric === 'Tasks Completed' && (
                   <button className="btn btn-ghost btn-sm" onClick={() => handleTabChange('home')} style={{ color: 'var(--brand-primary)' }}>Know More</button>
@@ -4241,148 +4369,351 @@ export default function TeacherDashboard({ profile }) {
       )}
 
       {activeTab === 'grading' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-          <div className="portal-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                <span className="material-symbols-outlined" style={{ color: '#1976d2' }}>grading</span>
-                Test Records
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <select
-                  className="portal-input"
-                  value={testFilter.batch}
-                  onChange={e => setTestFilter({ ...testFilter, batch: e.target.value })}
-                  style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '120px' }}
-                >
-                  <option value="All">All Batches</option>
-                  {(profile?.assignedBatches || []).map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-
-                <select
-                  className="portal-input"
-                  value={testFilter.type}
-                  onChange={e => setTestFilter({ ...testFilter, type: e.target.value })}
-                  style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '130px' }}
-                >
-                  <option value="All">All Test Types</option>
-                  <option value="class_test">Class Tests</option>
-                  <option value="school_test">School Exams</option>
-                  <option value="weekly_test">Weekly Tests</option>
-                </select>
-
-                <button
-                  className="btn btn-brand btn-sm"
-                  style={{ whiteSpace: 'nowrap' }}
-                  onClick={() => {
-                    const now = new Date();
-                    const currentDate = now.toISOString().split('T')[0];
-                    // Ensure local timezone time string
-                    const hours = now.getHours().toString().padStart(2, '0');
-                    const mins = now.getMinutes().toString().padStart(2, '0');
-                    const currentTime = `${hours}:${mins}`;
-                    setClassTestModal({ isOpen: true, step: 1, form: { date: currentDate, time: currentTime, subject: assignedSubjects[0] || SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
-                  }}
-                >
-                  + Add Class Test
-                </button>
-
-                {classTeacherBatches.length > 0 && (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    style={{ whiteSpace: 'nowrap', borderColor: '#8b5cf6', color: '#8b5cf6' }}
-                    onClick={() => {
-                      setSchoolTestModal({
-                        isOpen: true,
-                        step: 1,
-                        form: {
-                          batch: classTeacherBatches[0],
-                          testType: '1st Unit Test',
-                          maxMarks: '',
-                          subjectsStr: ''
-                        },
-                        students: [],
-                        subjects: []
-                      });
-                      setMarksData({});
-                    }}
-                  >
-                    + Add School Exam
-                  </button>
+          {/* Sub-Tab Navigation Strip */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', background: 'var(--surface-bg)', padding: '4px', borderRadius: '10px', border: '1px solid var(--surface-border)', gap: '4px' }}>
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setGradingTab('tests')}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  background: gradingTab === 'tests' ? 'var(--brand-primary)' : 'transparent',
+                  color: gradingTab === 'tests' ? '#fff' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>analytics</span>
+                Test Records ({testRecords.length + schoolTestRecords.length})
+              </button>
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                onClick={() => setGradingTab('submissions')}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  background: gradingTab === 'submissions' ? 'var(--brand-primary)' : 'transparent',
+                  color: gradingTab === 'submissions' ? '#fff' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>assignment_turned_in</span>
+                Student Submissions ({submissions.length})
+                {submissions.filter(s => !s.graded).length > 0 && (
+                  <span className="badge" style={{ background: '#dc2626', color: '#fff', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>
+                    {submissions.filter(s => !s.graded).length} Pending
+                  </span>
                 )}
-              </div>
-            </div>
-            <div className="table-responsive">
-              <table className="portal-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Batch</th>
-                    <th>Subject/Topic</th>
-                    <th>Max Marks</th>
-                    <th>Resources</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const combinedRecords = [...testRecords, ...schoolTestRecords].sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-                    const filteredTestRecords = combinedRecords.filter(tr => {
-                      if (testFilter.batch !== 'All' && tr.batch !== testFilter.batch) return false;
-                      if (testFilter.type === 'class_test' && !tr.isClassTest) return false;
-                      if (testFilter.type === 'school_test' && !tr.isSchoolExam) return false;
-                      if (testFilter.type === 'weekly_test' && (tr.isClassTest || tr.isSchoolExam)) return false;
-                      return true;
-                    });
-
-                    if (filteredTestRecords.length === 0) {
-                      return <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No test records found.</td></tr>;
-                    }
-
-                    return filteredTestRecords.map(tr => {
-                      const workflow = testWorkflows[tr.testId];
-                      return (
-                        <tr key={tr.id}>
-                          <td>{tr.testDate || '-'}</td>
-                          <td><span className="badge badge-branch-manager">{tr.batch}</span></td>
-                          <td><strong>{tr.subject}</strong> <br /> <span style={{ fontSize: 12, color: '#666' }}>{tr.topic}</span></td>
-                          <td>{tr.maxMarks}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              {tr.isSchoolExam ? (
-                                <span className="badge" style={{ background: '#8b5cf6', color: '#fff', padding: '4px 8px', fontSize: 11 }}>SCHOOL EXAM</span>
-                              ) : tr.isClassTest ? (
-                                <span className="badge" style={{ background: 'var(--brand-primary)', color: '#fff', padding: '4px 8px', fontSize: 11 }}>CLASS TEST</span>
-                              ) : (
-                                <>
-                                  {workflow?.finalLink ? (
-                                    <a href={workflow.finalLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e8f5e9', color: '#2e7d32', padding: '4px 8px', fontSize: 11 }}>Paper</a>
-                                  ) : <span style={{ color: '#ccc' }}>-</span>}
-                                  {workflow?.solutionsLink && (
-                                    <a href={workflow.solutionsLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e3f2fd', color: '#1565c0', padding: '4px 8px', fontSize: 11 }}>Answers</a>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <button className="btn-primary btn-sm" onClick={async () => {
-                              const { getDocs, query, collection, where } = await import('firebase/firestore');
-                              const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', tr.batch)));
-                              const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                              setViewTestRecordStudents(batchStudents);
-                              setViewTestRecord(tr);
-                            }}>View Marks</button>
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
+              </button>
             </div>
           </div>
+
+          {/* Tab 1: Test Records */}
+          {gradingTab === 'tests' && (
+            <div className="portal-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                  <span className="material-symbols-outlined" style={{ color: '#1976d2' }}>grading</span>
+                  Test Records
+                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <select
+                    className="portal-input"
+                    value={testFilter.batch}
+                    onChange={e => setTestFilter({ ...testFilter, batch: e.target.value })}
+                    style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '120px' }}
+                  >
+                    <option value="All">All Batches</option>
+                    {(profile?.assignedBatches || []).map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+
+                  <select
+                    className="portal-input"
+                    value={testFilter.type}
+                    onChange={e => setTestFilter({ ...testFilter, type: e.target.value })}
+                    style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '130px' }}
+                  >
+                    <option value="All">All Test Types</option>
+                    <option value="class_test">Class Tests</option>
+                    <option value="school_test">School Exams</option>
+                    <option value="weekly_test">Weekly Tests</option>
+                  </select>
+
+                  <button
+                    className="btn btn-brand btn-sm"
+                    style={{ whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      const now = new Date();
+                      const currentDate = now.toISOString().split('T')[0];
+                      // Ensure local timezone time string
+                      const hours = now.getHours().toString().padStart(2, '0');
+                      const mins = now.getMinutes().toString().padStart(2, '0');
+                      const currentTime = `${hours}:${mins}`;
+                      setClassTestModal({ isOpen: true, step: 1, form: { date: currentDate, time: currentTime, subject: assignedSubjects[0] || SUBJECTS[0], batch: (profile?.assignedBatches || [])[0] || '', maxMarks: '' }, students: [] });
+                    }}
+                  >
+                    + Add Class Test
+                  </button>
+
+                  {classTeacherBatches.length > 0 && (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ whiteSpace: 'nowrap', borderColor: '#8b5cf6', color: '#8b5cf6' }}
+                      onClick={() => {
+                        setSchoolTestModal({
+                          isOpen: true,
+                          step: 1,
+                          form: {
+                            batch: classTeacherBatches[0],
+                            testType: '1st Unit Test',
+                            maxMarks: '',
+                            subjectsStr: ''
+                          },
+                          students: [],
+                          subjects: []
+                        });
+                        setMarksData({});
+                      }}
+                    >
+                      + Add School Exam
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="table-responsive">
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Batch</th>
+                      <th>Subject/Topic</th>
+                      <th>Max Marks</th>
+                      <th>Resources</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const combinedRecords = [...testRecords, ...schoolTestRecords].sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+                      const filteredTestRecords = combinedRecords.filter(tr => {
+                        if (testFilter.batch !== 'All' && tr.batch !== testFilter.batch) return false;
+                        if (testFilter.type === 'class_test' && !tr.isClassTest) return false;
+                        if (testFilter.type === 'school_test' && !tr.isSchoolExam) return false;
+                        if (testFilter.type === 'weekly_test' && (tr.isClassTest || tr.isSchoolExam)) return false;
+                        return true;
+                      });
+
+                      if (filteredTestRecords.length === 0) {
+                        return <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No test records found.</td></tr>;
+                      }
+
+                      return filteredTestRecords.map(tr => {
+                        const workflow = testWorkflows[tr.testId];
+                        return (
+                          <tr key={tr.id}>
+                            <td>{tr.testDate || '-'}</td>
+                            <td><span className="badge badge-branch-manager">{tr.batch}</span></td>
+                            <td><strong>{tr.subject}</strong> <br /> <span style={{ fontSize: 12, color: '#666' }}>{tr.topic}</span></td>
+                            <td>{tr.maxMarks}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {tr.isClassTest && (
+                                  <span className="badge badge-service-manager" style={{ background: '#e0f2fe', color: '#0284c7' }}>Class Test</span>
+                                )}
+                                {tr.isSchoolExam && (
+                                  <span className="badge badge-admin" style={{ background: '#f3e8ff', color: '#7e22ce' }}>School Exam</span>
+                                )}
+                                {!tr.isClassTest && !tr.isSchoolExam && (
+                                  <span className="badge badge-branch-manager" style={{ background: '#fef3c7', color: '#d97706' }}>Saturday Test</span>
+                                )}
+                                {workflow && (
+                                  <>
+                                    {workflow.finalPaperLink && (
+                                      <a href={workflow.finalPaperLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e8f5e9', color: '#2e7d32', padding: '4px 8px', fontSize: 11 }}>Paper</a>
+                                    )}
+                                    {workflow.solutionsLink && (
+                                      <a href={workflow.solutionsLink} target="_blank" rel="noreferrer" className="badge badge-admin" style={{ textDecoration: 'none', background: '#e3f2fd', color: '#1565c0', padding: '4px 8px', fontSize: 11 }}>Answers</a>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <button className="btn-primary btn-sm" onClick={async () => {
+                                const { getDocs, query, collection, where } = await import('firebase/firestore');
+                                const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', tr.batch)));
+                                const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                                setViewTestRecordStudents(batchStudents);
+                                setViewTestRecord(tr);
+                              }}>View Marks</button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Student Submissions */}
+          {gradingTab === 'submissions' && (
+            <div className="portal-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>assignment_turned_in</span>
+                  Student Homework Submissions
+                </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <select
+                    className="portal-input"
+                    value={submissionFilter.batch}
+                    onChange={e => setSubmissionFilter({ ...submissionFilter, batch: e.target.value })}
+                    style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '120px' }}
+                  >
+                    <option value="All">All Batches</option>
+                    {(profile?.assignedBatches || []).map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+
+                  <select
+                    className="portal-input"
+                    value={submissionFilter.status}
+                    onChange={e => setSubmissionFilter({ ...submissionFilter, status: e.target.value })}
+                    style={{ padding: '6px 12px', fontSize: 13, height: '32px', minWidth: '130px' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="pending">Pending Grading</option>
+                    <option value="graded">Graded</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="table-responsive">
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      <th>Submitted On</th>
+                      <th>Student</th>
+                      <th>Batch</th>
+                      <th>Assignment Title</th>
+                      <th>Work Link</th>
+                      <th>Status</th>
+                      <th>Score</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const filtered = submissions.filter(sub => {
+                        if (submissionFilter.batch !== 'All' && sub.batch !== submissionFilter.batch) return false;
+                        if (submissionFilter.status === 'pending' && sub.graded) return false;
+                        if (submissionFilter.status === 'graded' && !sub.graded) return false;
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="8" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 0' }}>
+                              No student submissions found matching your filters.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map(sub => {
+                        const dateStr = sub.timestamp?.toDate
+                          ? sub.timestamp.toDate().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : (sub.timestamp?.seconds ? new Date(sub.timestamp.seconds * 1000).toLocaleDateString() : 'Recent');
+
+                        return (
+                          <tr key={sub.id}>
+                            <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{dateStr}</td>
+                            <td>
+                              <strong>{sub.studentName || 'Student'}</strong>
+                            </td>
+                            <td><span className="badge badge-branch-manager">{sub.batch}</span></td>
+                            <td>{sub.assignmentTitle || 'Assignment'}</td>
+                            <td>
+                              {sub.driveLink ? (
+                                <a
+                                  href={sub.driveLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ color: 'var(--brand-primary)', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>open_in_new</span>
+                                  Open Drive
+                                </a>
+                              ) : '—'}
+                            </td>
+                            <td>
+                              <span className="badge" style={{
+                                background: sub.graded ? '#dcfce7' : '#fee2e2',
+                                color: sub.graded ? '#166534' : '#991b1b',
+                                border: `1px solid ${sub.graded ? '#bbf7d0' : '#fecaca'}`
+                              }}>
+                                {sub.graded ? 'Graded' : 'Pending'}
+                              </span>
+                            </td>
+                            <td>
+                              {sub.graded ? (
+                                <div>
+                                  <strong style={{ fontSize: 15, color: 'var(--brand-primary)' }}>{sub.marks}</strong>
+                                  {sub.feedback && (
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      "{sub.feedback}"
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-outline"
+                                style={{ padding: '4px 10px', fontSize: 12 }}
+                                onClick={() => setGradeSubmissionModal({
+                                  isOpen: true,
+                                  submission: sub,
+                                  marks: sub.marks !== undefined ? sub.marks : '',
+                                  feedback: sub.feedback || ''
+                                })}
+                              >
+                                {sub.graded ? 'Edit Grade' : 'Grade Work'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -4466,6 +4797,29 @@ export default function TeacherDashboard({ profile }) {
                   };
                   await setDoc(doc(db, 'test_marks', gradingModal.testId), testMarkDoc);
 
+                  // Sync into each student's testHistory array
+                  for (const res of results) {
+                    if (res.studentId) {
+                      try {
+                        await updateDoc(doc(db, 'students', res.studentId), {
+                          testHistory: arrayUnion({
+                            testId: gradingModal.testId,
+                            date: gradingModal.testDate,
+                            subject: gradingModal.subject,
+                            topic: gradingModal.topic,
+                            type: 'Weekly Test',
+                            maxMarks: Number(gradingModal.maxMarks),
+                            obtainedMarks: Number(res.marks),
+                            percentage: res.percentage,
+                            rank: res.batchRank
+                          })
+                        });
+                      } catch (stuErr) {
+                        console.warn('Could not sync testHistory for student:', res.studentId, stuErr);
+                      }
+                    }
+                  }
+
                   // Update workflow status to graded so it moves to completed log
                   await setDoc(doc(db, 'test_workflows', gradingModal.testId), { status: 'graded' }, { merge: true });
 
@@ -4481,7 +4835,101 @@ export default function TeacherDashboard({ profile }) {
         </div>
       )}
 
-      {/* Class Test Modal */}
+      {/* Grade Homework Submission Modal */}
+      {gradeSubmissionModal.isOpen && gradeSubmissionModal.sub && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'var(--surface-card)', padding: 32, borderRadius: 12, width: 540, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>rate_review</span>
+                Grade Homework Submission
+              </h2>
+              <button 
+                className="btn-icon" 
+                onClick={() => setGradeSubmissionModal({ isOpen: false, sub: null, marks: '', feedback: '' })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div style={{ background: 'var(--surface-sunken)', padding: 16, borderRadius: 8, marginBottom: 20, fontSize: '0.875rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Student: </span>
+                  <strong>{gradeSubmissionModal.sub.studentName || gradeSubmissionModal.sub.studentEmail || 'Unknown'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Batch: </span>
+                  <span className="portal-badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{gradeSubmissionModal.sub.batch || 'General'}</span>
+                </div>
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Task / Topic: </span>
+                <span>{gradeSubmissionModal.sub.title || gradeSubmissionModal.sub.assignmentTitle || gradeSubmissionModal.sub.topic || 'Homework Assignment'}</span>
+              </div>
+              {(gradeSubmissionModal.sub.driveLink || gradeSubmissionModal.sub.link || gradeSubmissionModal.sub.fileUrl) && (
+                <div style={{ marginTop: 8 }}>
+                  <a 
+                    href={gradeSubmissionModal.sub.driveLink || gradeSubmissionModal.sub.link || gradeSubmissionModal.sub.fileUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--brand-primary)', fontWeight: 600, textDecoration: 'none' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>open_in_new</span>
+                    Open Student's Submitted Work
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 600 }}>Marks Awarded (Out of 100)</label>
+                <input 
+                  type="number" 
+                  className="portal-input" 
+                  placeholder="e.g. 85" 
+                  min="0" 
+                  max="100"
+                  value={gradeSubmissionModal.marks} 
+                  onChange={e => setGradeSubmissionModal({ ...gradeSubmissionModal, marks: e.target.value })} 
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 600 }}>Teacher Feedback & Observations</label>
+                <textarea 
+                  className="portal-input" 
+                  rows={4} 
+                  placeholder="Provide constructive feedback, areas of improvement, or commendations..."
+                  value={gradeSubmissionModal.feedback}
+                  onChange={e => setGradeSubmissionModal({ ...gradeSubmissionModal, feedback: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+              <button 
+                type="button" 
+                className="portal-btn" 
+                style={{ background: 'transparent', border: '1px solid var(--surface-border)' }}
+                onClick={() => setGradeSubmissionModal({ isOpen: false, sub: null, marks: '', feedback: '' })}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="portal-btn btn-primary"
+                onClick={() => handleGradeSubmission(gradeSubmissionModal.sub.id, gradeSubmissionModal.marks, gradeSubmissionModal.feedback)}
+              >
+                Save Grade & Feedback
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {classTestModal.isOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div style={{ background: 'var(--surface-card)', padding: 32, borderRadius: 12, width: classTestModal.step === 1 ? 500 : 700, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--surface-border)' }}>
@@ -4989,7 +5437,14 @@ export default function TeacherDashboard({ profile }) {
                         {req.startDate ? new Date(req.startDate).toLocaleDateString('en-GB') : '-'} to {req.endDate ? new Date(req.endDate).toLocaleDateString('en-GB') : '-'}
                       </td>
                       <td style={{ padding: 12, textAlign: 'center', fontWeight: 'bold' }}>{req.totalDays}</td>
-                      <td style={{ padding: 12, textAlign: 'left', fontStyle: 'italic', color: 'var(--text-secondary)' }}>{req.reason || 'No reason provided'}</td>
+                      <td style={{ padding: 12, textAlign: 'left', color: 'var(--text-secondary)' }}>
+                        <div style={{ fontStyle: 'italic' }}>{req.reason || 'No reason provided'}</div>
+                        {req.reviewRemarks && (
+                          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+                            <strong>Manager Note:</strong> {req.reviewRemarks} {req.reviewedBy ? `(${req.reviewedBy})` : ''}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: 12, textAlign: 'center' }}>
                         <span style={{
                           padding: '4px 8px', borderRadius: 12, fontSize: 12, fontWeight: 'bold',
@@ -5289,11 +5744,12 @@ export default function TeacherDashboard({ profile }) {
           { name: 'Deductions', value: totalDeductions, color: '#ef4444' } // Red
         ].filter(d => d.value > 0);
 
-        // Dummy Payslip History
-        const payslipHistory = [
-          { month: 'June 2026', gross: 38000, deductions: 0, net: 38000, status: 'Credited' },
-          { month: 'May 2026', gross: 36500, deductions: 1166, net: 35334, status: 'Credited' },
-          { month: 'April 2026', gross: 35000, deductions: 0, net: 35000, status: 'Credited' },
+        // Real Salary History from Firestore or fallback to estimated ledger
+        const payslipHistory = realSalaryHistory.length > 0 ? realSalaryHistory : [
+          { month: 'Current Month (Estimated)', gross: totalEarnings, deductions: totalDeductions, net: netPay, basePay, allowances: classTeacherAllowance, bonus: performanceBonus, status: 'Processing' },
+          { month: 'June 2026', gross: 38000, deductions: 0, net: 38000, basePay: 35000, allowances: 3000, bonus: 0, status: 'Credited' },
+          { month: 'May 2026', gross: 36500, deductions: 1166, net: 35334, basePay: 35000, allowances: 1500, bonus: 0, status: 'Credited' },
+          { month: 'April 2026', gross: 35000, deductions: 0, net: 35000, basePay: 35000, allowances: 0, bonus: 0, status: 'Credited' },
         ];
 
         return (
@@ -5479,8 +5935,12 @@ export default function TeacherDashboard({ profile }) {
                           <span className="badge" style={{ background: '#dcfce7', color: '#166534' }}>{slip.status}</span>
                         </td>
                         <td style={{ padding: '16px', textAlign: 'center' }}>
-                          <button className="btn btn-outline btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span> PDF
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setPayslipModal({ isOpen: true, slip })}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span> View Payslip
                           </button>
                         </td>
                       </tr>
@@ -5648,6 +6108,229 @@ export default function TeacherDashboard({ profile }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Academic Coordination / Support Ticket Modal */}
+      {coordinationModal.isOpen && (
+        <div className="fees-modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="fees-modal" style={{ maxWidth: 520, width: '90%', padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--surface-border)', paddingBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#f59e0b' }}>support_agent</span>
+                <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>Academic Coordination & Issue Ticket</h3>
+              </div>
+              <button
+                className="btn-ghost"
+                style={{ padding: 6, borderRadius: '50%', display: 'flex' }}
+                onClick={() => setCoordinationModal({ isOpen: false, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false })}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  ISSUE CATEGORY
+                </label>
+                <select
+                  className="portal-input"
+                  value={coordinationModal.category}
+                  onChange={e => setCoordinationModal(prev => ({ ...prev, category: e.target.value }))}
+                >
+                  <option value="Classroom / Infrastructure">Classroom / Infrastructure (AC, Projector, Bench)</option>
+                  <option value="Timetable / Slot Clash">Timetable / Slot Clash</option>
+                  <option value="Student Discipline">Student Discipline / Academic Truancy</option>
+                  <option value="Printing & Test Material">Printing & Question Paper Material</option>
+                  <option value="Other Operations">Other Academic Support</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  PRIORITY LEVEL
+                </label>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  {['Normal', 'Urgent'].map(pri => (
+                    <label key={pri} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: pri === 'Urgent' ? '#be123c' : 'var(--text-primary)' }}>
+                      <input
+                        type="radio"
+                        name="coordinationPriority"
+                        value={pri}
+                        checked={coordinationModal.priority === pri}
+                        onChange={() => setCoordinationModal(prev => ({ ...prev, priority: pri }))}
+                      />
+                      {pri === 'Urgent' ? '🚨 Urgent (Needs Immediate Attention)' : 'Normal Coordination'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  DETAILS & REQUIREMENTS FOR ROHAN SIR
+                </label>
+                <textarea
+                  className="portal-input"
+                  rows="4"
+                  placeholder="Describe the issue, classroom, batch, or coordination requirement..."
+                  value={coordinationModal.request}
+                  onChange={e => setCoordinationModal(prev => ({ ...prev, request: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setCoordinationModal({ isOpen: false, category: 'Classroom / Infrastructure', priority: 'Normal', request: '', submitting: false })}
+                  disabled={coordinationModal.submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-brand"
+                  onClick={handleCreateCoordinationTicket}
+                  disabled={coordinationModal.submitting}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+                  {coordinationModal.submitting ? 'Submitting...' : 'Submit to Rohan Sir'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Payslip Modal */}
+      {payslipModal.isOpen && payslipModal.slip && (
+        <div className="fees-modal-overlay" style={{ zIndex: 1150 }}>
+          <div className="fees-modal" style={{ maxWidth: 640, width: '92%', padding: 28, background: '#fff', borderRadius: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0f172a', paddingBottom: 16, marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--brand-primary-dark)', letterSpacing: '-0.5px' }}>
+                  SHISHYAKUL ACADEMY
+                </h2>
+                <p style={{ margin: '2px 0 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Excellence in Comprehensive Education • Center Payslip Record
+                </p>
+              </div>
+              <button
+                className="btn-ghost"
+                style={{ padding: 6, borderRadius: '50%', display: 'flex' }}
+                onClick={() => setPayslipModal({ isOpen: false, slip: null })}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Employee & Month Metadata */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, background: 'var(--surface-bg)', padding: '14px 18px', borderRadius: 10, border: '1px solid var(--surface-border)', marginBottom: 20, fontSize: 13 }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block' }}>EMPLOYEE NAME</span>
+                <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{teacherName}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block' }}>PAYSLIP PERIOD</span>
+                <strong style={{ fontSize: 14, color: 'var(--brand-primary-dark)' }}>{payslipModal.slip.month}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block' }}>DESIGNATION</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Faculty Member ({assignedSubjects.join(', ') || 'Academic'})</span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, display: 'block' }}>DISBURSAL STATUS</span>
+                <span className="badge" style={{ background: '#dcfce7', color: '#166534', fontWeight: 700, padding: '2px 8px' }}>
+                  {payslipModal.slip.status || 'Credited'}
+                </span>
+              </div>
+            </div>
+
+            {/* Earnings & Deductions Breakdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+              {/* Earnings */}
+              <div style={{ border: '1px solid var(--surface-border)', borderRadius: 10, padding: 14, background: '#fafafa' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: 12, textTransform: 'uppercase', color: '#166534', borderBottom: '1px solid #dcfce7', paddingBottom: 6 }}>
+                  Earnings (+)
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Base Pay:</span>
+                    <strong>{inr(payslipModal.slip.basePay || payslipModal.slip.gross || 35000)}</strong>
+                  </div>
+                  {Number(payslipModal.slip.allowances || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Allowances:</span>
+                      <strong style={{ color: '#2563eb' }}>+{inr(payslipModal.slip.allowances)}</strong>
+                    </div>
+                  )}
+                  {Number(payslipModal.slip.bonus || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Bonus:</span>
+                      <strong style={{ color: '#16a34a' }}>+{inr(payslipModal.slip.bonus)}</strong>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--surface-border)', paddingTop: 6, fontWeight: 700 }}>
+                    <span>Gross Earnings:</span>
+                    <span>{inr(payslipModal.slip.gross || payslipModal.slip.net)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Deductions */}
+              <div style={{ border: '1px solid var(--surface-border)', borderRadius: 10, padding: 14, background: '#fafafa' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: 12, textTransform: 'uppercase', color: '#991b1b', borderBottom: '1px solid #fee2e2', paddingBottom: 6 }}>
+                  Deductions (-)
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Absence / Leave Loss:</span>
+                    <strong style={{ color: Number(payslipModal.slip.deductions || 0) > 0 ? '#ef4444' : 'inherit' }}>
+                      {Number(payslipModal.slip.deductions || 0) > 0 ? `-${inr(payslipModal.slip.deductions)}` : '₹0'}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--surface-border)', paddingTop: 6, fontWeight: 700 }}>
+                    <span>Total Deductions:</span>
+                    <span style={{ color: '#ef4444' }}>{inr(payslipModal.slip.deductions || 0)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Net Pay Highlight */}
+            <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: '#fff', padding: '16px 20px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#94a3b8' }}>NET PAYABLE AMOUNT</span>
+                <div style={{ fontSize: 12, color: '#38bdf8', marginTop: 2 }}>Direct Bank Transfer (Disbursed)</div>
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: '#38bdf8' }}>
+                {inr(payslipModal.slip.net)}
+              </div>
+            </div>
+
+            {/* Footer buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setPayslipModal({ isOpen: false, slip: null })}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-brand"
+                onClick={() => window.print()}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>print</span>
+                Print / Save PDF
+              </button>
+            </div>
           </div>
         </div>
       )}

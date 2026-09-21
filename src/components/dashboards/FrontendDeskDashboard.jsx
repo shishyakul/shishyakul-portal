@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
+import PersonalAttendance from './shared/PersonalAttendance';
+import PersonalSalary from './shared/PersonalSalary';
 
 export default function FrontendDeskDashboard({ profile }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = location.hash.replace('#', '');
 
   const [loading, setLoading] = useState(true);
   const [demos, setDemos] = useState([]);
@@ -71,6 +75,13 @@ export default function FrontendDeskDashboard({ profile }) {
     const date = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
     return (new Date() - date) < 7 * 24 * 60 * 60 * 1000;
   });
+
+  if (activeTab === 'personal_attendance') {
+    return <PersonalAttendance profile={profile} />;
+  }
+  if (activeTab === 'personal_salary') {
+    return <PersonalSalary profile={profile} />;
+  }
 
   return (
     <div>

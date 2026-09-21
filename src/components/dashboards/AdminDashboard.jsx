@@ -3,6 +3,9 @@ import { collection, getDocs, onSnapshot, query, doc, updateDoc, setDoc, getDoc 
 import { db } from '../../firebase';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import NotificationBell from '../NotificationBell';
+import { useLocation } from 'react-router-dom';
+import PersonalAttendance from './shared/PersonalAttendance';
+import PersonalSalary from './shared/PersonalSalary';
 
 const ROLE_COLORS = {
   admin: 'badge-admin',
@@ -18,6 +21,9 @@ const formatRole = (role) => {
 };
 
 export default function AdminDashboard({ profile }) {
+  const location = useLocation();
+  const activeTab = location.hash.replace('#', '');
+
   const [users, setUsers] = useState([]);
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
@@ -52,7 +58,11 @@ export default function AdminDashboard({ profile }) {
       setLectureReports(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
     });
 
-    return () => { unsub(); unsubAtt(); unsubLectureReports(); };
+    const unsubLeave = onSnapshot(collection(db, 'leave_requests'), (snap) => {
+      setLeaveRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { unsub(); unsubAtt(); unsubLectureReports(); unsubLeave(); };
   }, []);
 
   const hour = new Date().getHours();
@@ -90,6 +100,8 @@ export default function AdminDashboard({ profile }) {
   const conversionRate = (funnel.enquiry + funnel.demo + funnel.admitted) > 0 
     ? Math.round((funnel.admitted / (funnel.enquiry + funnel.demo + funnel.admitted + funnel.dropped)) * 100) 
     : 0;
+
+  const pendingLeaves = leaveRequests.filter(r => r.status === 'pending');
 
   // Group attendance logs by batch and sort by date desc
   const attendanceByBatch = {};
@@ -226,15 +238,76 @@ export default function AdminDashboard({ profile }) {
 
       for (const record of payrollData) {
         await setDoc(doc(db, 'core_payroll_timesheets', `${record.teacherId}_${currentMonth}`), record);
+
+        // Bridge directly into salary_history for Teacher Vault
+        const monthName = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        const teacherUser = teachers.find(t => t.id === record.teacherId);
+        const baseSalary = Number(teacherUser?.baseSalary || 35000);
+        const deductions = Number(teacherUser?.deductions || 0);
+        const allowances = Number(teacherUser?.allowances || (teacherUser?.classTeacherBatch ? 3000 : 0));
+        const bonus = Number(teacherUser?.bonus || 0);
+        const netSalary = baseSalary + allowances + bonus - deductions;
+
+        await setDoc(doc(db, 'salary_history', `${record.teacherId}_${currentMonth}`), {
+          teacherId: record.teacherId,
+          teacherName: record.teacherName,
+          month: monthName,
+          monthCode: currentMonth,
+          gross: baseSalary + allowances + bonus,
+          basePay: baseSalary,
+          allowances,
+          bonus,
+          deductions,
+          net: netSalary,
+          status: 'Credited',
+          paidOn: now.toISOString().split('T')[0],
+          syncedAt: new Date().toISOString()
+        }, { merge: true });
       }
       
-      alert(`Successfully bridged payroll timesheets for ${payrollData.length} teachers to shishyakul-core!`);
+      alert(`Successfully bridged payroll timesheets and salary vault for ${payrollData.length} teachers!`);
     } catch (err) {
       alert("Payroll Sync Error: " + err.message);
     } finally {
       setSyncingPayroll(false);
     }
   };
+
+  const handleApproveLeave = async (reqId) => {
+    try {
+      await updateDoc(doc(db, 'leave_requests', reqId), {
+        status: 'approved',
+        reviewedBy: profile?.fullName || profile?.name || 'Sumit Sir (Branch Manager)',
+        reviewedAt: new Date().toISOString()
+      });
+      alert("Faculty leave request approved.");
+    } catch (err) {
+      alert("Error approving leave: " + err.message);
+    }
+  };
+
+  const handleRejectLeave = async (reqId) => {
+    const remark = prompt("Enter rejection note/reason (optional):");
+    if (remark === null) return;
+    try {
+      await updateDoc(doc(db, 'leave_requests', reqId), {
+        status: 'rejected',
+        reviewRemarks: remark.trim() || 'Declined by Branch Administration',
+        reviewedBy: profile?.fullName || profile?.name || 'Sumit Sir (Branch Manager)',
+        reviewedAt: new Date().toISOString()
+      });
+      alert("Faculty leave request rejected.");
+    } catch (err) {
+      alert("Error rejecting leave: " + err.message);
+    }
+  };
+
+  if (activeTab === 'personal_attendance') {
+    return <PersonalAttendance profile={profile} />;
+  }
+  if (activeTab === 'personal_salary') {
+    return <PersonalSalary profile={profile} />;
+  }
 
   return (
     <div>
@@ -469,6 +542,71 @@ export default function AdminDashboard({ profile }) {
                     <span><strong>Next:</strong> {rep.nextTarget}</span>
                   </div>
                   {rep.remarks && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }}>Note: {rep.remarks}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Faculty Leave Approvals Section */}
+      <div className="portal-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 28 }}>
+        <div style={{ padding: '16px 20px', background: 'linear-gradient(90deg, var(--surface-bg), rgba(245, 158, 11, 0.08))', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 18, display: 'flex', alignItems: 'center', gap: 8, color: '#d97706' }}>
+            <span className="material-symbols-outlined">flight_takeoff</span>
+            Faculty Leave Approvals
+          </h2>
+          {pendingLeaves.length > 0 && (
+            <span className="badge" style={{ background: '#fef3c7', color: '#b45309', fontWeight: 700 }}>
+              {pendingLeaves.length} Pending
+            </span>
+          )}
+        </div>
+        <div style={{ padding: 20 }}>
+          {pendingLeaves.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px 0' }}>
+              <span className="material-symbols-outlined" style={{ color: '#10b981', fontSize: 32 }}>check_circle</span>
+              <p style={{ margin: '8px 0 0 0', color: 'var(--text-secondary)' }}>All faculty leave applications are up to date.</p>
+            </div>
+          ) : (
+            <div className="grid-auto-300">
+              {pendingLeaves.map(req => (
+                <div key={req.id} style={{ background: 'var(--surface-bg)', padding: 16, borderRadius: 8, borderLeft: '4px solid #f59e0b', borderTop: '1px solid var(--surface-border)', borderRight: '1px solid var(--surface-border)', borderBottom: '1px solid var(--surface-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{req.teacherName || 'Faculty Member'}</strong>
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>
+                        {req.type || 'Leave'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-primary-dark)' }}>
+                      {req.totalDays || 1} Days
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    📅 {req.startDate} to {req.endDate}
+                  </div>
+                  {req.reason && (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', background: '#fff', padding: '8px', borderRadius: 4, border: '1px solid #f1f5f9' }}>
+                      "{req.reason}"
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      onClick={() => handleApproveLeave(req.id)}
+                      className="btn btn-sm"
+                      style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleRejectLeave(req.id)}
+                      className="btn btn-sm"
+                      style={{ flex: 1, background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, padding: '6px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
