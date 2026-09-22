@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import NotificationBell from '../NotificationBell';
 import PersonalAttendance from './shared/PersonalAttendance';
 import PersonalSalary from './shared/PersonalSalary';
+import './ServiceManagerDashboard.css';
 
 export default function ServiceManagerDashboard({ profile }) {
   const navigate = useNavigate();
@@ -27,6 +27,8 @@ export default function ServiceManagerDashboard({ profile }) {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [selectedSlotOverride, setSelectedSlotOverride] = useState('auto');
   const [subTab, setSubTab] = useState('overview'); // 'overview' or 'analytics'
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
   const CLASSROOMS = ['SAPTARISHI', 'MEGH SINGH', 'TANAJI KAKSH', 'AHOM KAKSH', 'MANIKARNIKA 1', 'MANIKARNIKA 2'];
@@ -39,6 +41,11 @@ export default function ServiceManagerDashboard({ profile }) {
     const yyyy = today.getFullYear();
     return `${yyyy}-${mm}-${dd}`;
   };
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
@@ -131,7 +138,7 @@ export default function ServiceManagerDashboard({ profile }) {
     if (attRecord) {
       return {
         type: 'present',
-        punchIn: attRecord.punchIn,
+        punchIn: attRecord.punchIn || 'Present',
         punchOut: attRecord.punchOut,
         status: attRecord.status || 'On Time'
       };
@@ -153,6 +160,15 @@ export default function ServiceManagerDashboard({ profile }) {
 
   const presentTeachersCount = teachers.filter(t => todayTeacherAttendance.some(r => r.teacherId === t.id)).length;
   const totalTeachersCount = teachers.length;
+
+  // Filtered teachers list for presence check-in
+  const filteredTeachers = teachers.filter(t => {
+    if (!teacherSearch.trim()) return true;
+    const q = teacherSearch.toLowerCase();
+    const name = (t.fullName || '').toLowerCase();
+    const email = (t.email || '').toLowerCase();
+    return name.includes(q) || email.includes(q);
+  });
 
   // Chart Data: Syllabus
   const syllabusData = Object.values(
@@ -188,9 +204,6 @@ export default function ServiceManagerDashboard({ profile }) {
     const minutes = todayDate.getMinutes();
     const timeVal = hours * 60 + minutes;
 
-    // Slot 1: 02:00 PM TO 04:00 PM -> 14:00 (840) to 16:00 (960)
-    // Slot 2: 04:30 PM TO 06:30 PM -> 16:30 (990) to 18:30 (1110)
-    // Slot 3: 07:00 PM TO 09:00 PM -> 19:00 (1140) to 21:00 (1260)
     if (timeVal >= 840 && timeVal <= 960) return '02:00 PM TO 04:00 PM';
     if (timeVal >= 990 && timeVal <= 1110) return '04:30 PM TO 06:30 PM';
     if (timeVal >= 1140 && timeVal <= 1260) return '07:00 PM TO 09:00 PM';
@@ -255,28 +268,6 @@ export default function ServiceManagerDashboard({ profile }) {
   });
   rohanLecturesToday.sort((a, b) => a.slot.localeCompare(b.slot));
 
-  // Legacy todaysClasses layout computed for Deep Analytics
-  const todaysClasses = [];
-  Object.keys(timetable).forEach(slot => {
-    Object.keys(timetable[slot] || {}).forEach(room => {
-      const cell = timetable[slot][room];
-      let assignedTeacherId = null;
-      let subject = '';
-      if (['MONDAY', 'TUESDAY', 'WEDNESDAY'].includes(currentDay) && cell?.monWed?.teacherId) {
-        assignedTeacherId = cell.monWed.teacherId; subject = cell.monWed.subject;
-      } else if (['THURSDAY', 'FRIDAY', 'SATURDAY'].includes(currentDay) && cell?.thursSat?.teacherId) {
-        assignedTeacherId = cell.thursSat.teacherId; subject = cell.thursSat.subject;
-      } else if (currentDay === 'SUNDAY' && cell?.extra?.teacherId) {
-        assignedTeacherId = cell.extra.teacherId; subject = cell.extra.subject;
-      }
-      if (assignedTeacherId) {
-        const teacherName = teachers.find(t => t.id === assignedTeacherId)?.fullName || 'Unknown';
-        todaysClasses.push({ slot, room, batch: cell.batch, subject, teacher: teacherName });
-      }
-    });
-  });
-  todaysClasses.sort((a, b) => a.slot.localeCompare(b.slot));
-
   // Attendance Trend (Last 7 Days)
   const last7Days = Array.from({length: 7}, (_, i) => {
     const d = new Date();
@@ -317,7 +308,7 @@ export default function ServiceManagerDashboard({ profile }) {
 
   const handleRejectLeave = async (reqId) => {
     const remark = prompt("Enter rejection note/reason (optional):");
-    if (remark === null) return; // User cancelled
+    if (remark === null) return;
     try {
       await updateDoc(doc(db, 'leave_requests', reqId), {
         status: 'rejected',
@@ -424,6 +415,20 @@ export default function ServiceManagerDashboard({ profile }) {
     });
   }
 
+  const formattedDate = currentTime.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  const formattedTime = currentTime.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+
   if (activeTab === 'personal_attendance') {
     return <PersonalAttendance profile={profile} />;
   }
@@ -432,211 +437,243 @@ export default function ServiceManagerDashboard({ profile }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
+    <div className="sm-container">
       
-      {/* Dynamic Styling Overrides */}
-      <style>{`
-        @media (max-width: 992px) {
-          .service-top-grid, .service-ops-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-        .room-pulse-dot {
-          width: 8px;
-          height: 8px;
-          background-color: var(--status-success);
-          border-radius: 50%;
-          display: inline-block;
-          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-          animation: pulse-green 1.5s infinite;
-        }
-        @keyframes pulse-green {
-          0% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-          }
-          70% {
-            transform: scale(1);
-            box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
-          }
-          100% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-          }
-        }
-        .teacher-presence-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px 0;
-          border-bottom: 1px solid var(--surface-border);
-          transition: background-color 0.2s ease;
-        }
-        .teacher-presence-row:last-child {
-          border-bottom: none;
-        }
-        .slot-btn {
-          padding: 6px 12px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 600;
-          background: var(--surface-bg);
-          border: 1px solid var(--surface-border);
-          color: var(--text-secondary);
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .slot-btn.active {
-          background: var(--brand-primary);
-          border-color: var(--brand-primary);
-          color: #fff;
-        }
-      `}</style>
+      {/* ── Top Header Card ── */}
+      <div className="sm-header-card">
+        <div className="sm-header-left">
+          <div className="sm-header-badge-row">
+            <span className="sm-badge-live">
+              <span className="sm-live-dot"></span>
+              Academic Operations Active
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              • Service Management Center
+            </span>
+          </div>
+          <h1 className="sm-header-title">
+            Welcome back, <span className="gradient-text">Rohan Sir</span> 👋
+          </h1>
+          <p className="sm-header-subtitle">
+            Kaksh live activity radar, faculty presence, master timetable crafting, and academic KPIs.
+          </p>
+        </div>
 
-      {/* Page Header */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="page-title">Academic & Service Operations</h1>
-          <p className="page-subtitle">Welcome back, Rohan Sir. Here is your daily operational briefing.</p>
+        <div className="sm-header-meta">
+          <div className="sm-time-chip">
+            <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)', fontSize: 20 }}>
+              schedule
+            </span>
+            <span className="sm-time-clock">{formattedTime}</span>
+            <span className="sm-date-text">{formattedDate}</span>
+          </div>
         </div>
       </div>
 
-      {/* Sub-tab navigation */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--surface-border)', gap: 24, marginBottom: 8 }}>
+      {/* ── Bento-Grid Action Launchers ── */}
+      <div className="sm-bento-grid">
+        {/* 1. Crafting Table */}
+        <div 
+          className="sm-action-tile sm-tile-gold"
+          onClick={() => navigate('/faculty')}
+        >
+          <div className="sm-tile-top">
+            <div className="sm-tile-icon-box" style={{ background: 'rgba(253, 180, 42, 0.12)' }}>
+              <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary-dark)', fontSize: 24 }}>
+                architecture
+              </span>
+            </div>
+            <span className="sm-tile-badge" style={{ background: 'rgba(253, 180, 42, 0.15)', color: 'var(--brand-primary-dark)' }}>
+              Crafting Table
+            </span>
+          </div>
+          <div>
+            <h3 className="sm-tile-title">Master Timetable</h3>
+            <p className="sm-tile-desc">Assign slots, classrooms, and subject faculty mapping</p>
+          </div>
+        </div>
+
+        {/* 2. Faculty Directory */}
+        <div 
+          className="sm-action-tile sm-tile-indigo"
+          onClick={() => navigate('/users')}
+        >
+          <div className="sm-tile-top">
+            <div className="sm-tile-icon-box" style={{ background: 'rgba(99, 102, 241, 0.12)' }}>
+              <span className="material-symbols-outlined" style={{ color: '#6366f1', fontSize: 24 }}>
+                groups
+              </span>
+            </div>
+            <span className="sm-tile-badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1' }}>
+              {teachers.length} Teachers
+            </span>
+          </div>
+          <div>
+            <h3 className="sm-tile-title">Faculty Roster</h3>
+            <p className="sm-tile-desc">Manage teachers, batches, and subject qualifications</p>
+          </div>
+        </div>
+
+        {/* 3. Daily Attendance */}
+        <div 
+          className="sm-action-tile sm-tile-emerald"
+          onClick={() => navigate('/attendance')}
+        >
+          <div className="sm-tile-top">
+            <div className="sm-tile-icon-box" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
+              <span className="material-symbols-outlined" style={{ color: '#10b981', fontSize: 24 }}>
+                fact_check
+              </span>
+            </div>
+            <span className="sm-tile-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+              {attendanceRate}% Present
+            </span>
+          </div>
+          <div>
+            <h3 className="sm-tile-title">Batch Attendance</h3>
+            <p className="sm-tile-desc">Inspect daily student sessions and absentee trends</p>
+          </div>
+        </div>
+
+        {/* 4. Student Directory */}
+        <div 
+          className="sm-action-tile sm-tile-rose"
+          onClick={() => navigate('/students')}
+        >
+          <div className="sm-tile-top">
+            <div className="sm-tile-icon-box" style={{ background: 'rgba(244, 63, 94, 0.12)' }}>
+              <span className="material-symbols-outlined" style={{ color: '#f43f5e', fontSize: 24 }}>
+                school
+              </span>
+            </div>
+            <span className="sm-tile-badge" style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e' }}>
+              {activeStudentsCount} Admitted
+            </span>
+          </div>
+          <div>
+            <h3 className="sm-tile-title">Academic Directory</h3>
+            <p className="sm-tile-desc">Student records, batches, performance, and parent logs</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Segmented Sub-Tab Switcher ── */}
+      <div className="sm-tab-bar">
         <button 
           onClick={() => setSubTab('overview')} 
-          style={{ 
-            padding: '12px 4px', 
-            background: 'none', 
-            fontSize: 15, 
-            fontWeight: 600, 
-            color: subTab === 'overview' ? 'var(--brand-primary-dark)' : 'var(--text-secondary)',
-            borderBottom: subTab === 'overview' ? '3px solid var(--brand-primary)' : '3px solid transparent',
-            transition: 'all 0.2s ease',
-            cursor: 'pointer'
-          }}
+          className={`sm-tab-btn ${subTab === 'overview' ? 'active' : ''}`}
         >
-          Daily Operations
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>dashboard</span>
+          Daily Operations Hub
         </button>
         <button 
           onClick={() => setSubTab('analytics')} 
-          style={{ 
-            padding: '12px 4px', 
-            background: 'none', 
-            fontSize: 15, 
-            fontWeight: 600, 
-            color: subTab === 'analytics' ? 'var(--brand-primary-dark)' : 'var(--text-secondary)',
-            borderBottom: subTab === 'analytics' ? '3px solid var(--brand-primary)' : '3px solid transparent',
-            transition: 'all 0.2s ease',
-            cursor: 'pointer'
-          }}
+          className={`sm-tab-btn ${subTab === 'analytics' ? 'active' : ''}`}
         >
-          Deep Analytics & Feeds
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>analytics</span>
+          Academic Intelligence & Feeds
         </button>
       </div>
 
-      {/* OVERVIEW SUBTAB */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SUBTAB 1: DAILY OPERATIONS HUB
+          ══════════════════════════════════════════════════════════════════════ */}
       {subTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
-          {/* ZONE 1: Global KPIs & My Lectures Today */}
-          <div className="service-top-grid" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: rohanLecturesToday.length > 0 ? '2fr 1fr' : '1fr', 
-            gap: 24 
-          }}>
-            {/* KPI Cards Grid */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: rohanLecturesToday.length > 0 ? 'repeat(auto-fit, minmax(200px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))', 
-              gap: 16 
-            }}>
-              
-              {/* Card 1: Present Teachers */}
-              <div className="portal-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px' }}>
-                <div style={{ background: '#d1fae5', padding: '12px', borderRadius: '12px', display: 'flex' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#10b981' }}>supervisor_account</span>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 24, margin: 0, fontWeight: 700 }}>{presentTeachersCount} / {totalTeachersCount}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Teachers Present Today</p>
-                </div>
+          {/* Primary KPI Strip */}
+          <div className="sm-kpi-grid">
+            {/* KPI 1: Teachers Present */}
+            <div className="sm-kpi-card">
+              <div className="sm-kpi-icon-box" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
+                <span className="material-symbols-outlined" style={{ color: '#10b981', fontSize: 26 }}>supervisor_account</span>
               </div>
-
-              {/* Card 2: Student Attendance */}
-              <div className="portal-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px' }}>
-                <div style={{ background: attendanceRate < 85 ? '#fee2e2' : 'rgba(253,180,42,0.15)', padding: '12px', borderRadius: '12px', display: 'flex' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: attendanceRate < 85 ? '#ef4444' : 'var(--brand-primary)' }}>how_to_reg</span>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 24, margin: 0, fontWeight: 700 }}>{attendanceRate}%</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Today's Student Attendance</p>
-                </div>
-              </div>
-
-              {/* Card 3: Unresolved Grievances */}
-              <div className="portal-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', cursor: 'pointer' }} onClick={() => navigate('/faculty')}>
-                <div style={{ background: '#fee2e2', padding: '12px', borderRadius: '12px', display: 'flex' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#ef4444' }}>warning</span>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 24, margin: 0, fontWeight: 700 }}>{stats.pendingGrievances}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Pending Grievances</p>
-                </div>
-              </div>
-
-              {/* Card 4: Active Published Tests */}
-              <div className="portal-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px' }}>
-                <div style={{ background: '#dbeafe', padding: '12px', borderRadius: '12px', display: 'flex' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#3b82f6' }}>quiz</span>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 24, margin: 0, fontWeight: 700 }}>{published.length}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>Active Published Tests</p>
-                </div>
+              <div>
+                <div className="sm-kpi-value">{presentTeachersCount} / {totalTeachersCount}</div>
+                <div className="sm-kpi-label">Teachers Present Today</div>
               </div>
             </div>
 
-            {/* Rohan's Personal Schedule widget */}
-            {rohanLecturesToday.length > 0 && (
-              <div className="portal-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div>
-                  <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 0 12px 0', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--brand-primary-dark)' }}>menu_book</span>
-                    My Lectures Today (Rohan Sir)
-                  </h3>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '110px', overflowY: 'auto' }}>
-                    {rohanLecturesToday.map((lect, idx) => (
-                      <div key={idx} style={{ background: 'var(--surface-bg)', padding: '6px 10px', borderRadius: '6px', fontSize: 12, border: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <strong style={{ color: 'var(--text-primary)' }}>{lect.batch}</strong>
-                          <span style={{ marginLeft: 6, color: 'var(--brand-primary-dark)', fontSize: 11 }}>{lect.subject}</span>
-                        </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-                          🕒 {lect.slot.split(' ')[0]} | 🏫 {lect.room.split(' ')[0]}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, borderTop: '1px solid var(--surface-border)', paddingTop: 8 }}>
-                  Today: {currentDay}, {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
-                </div>
+            {/* KPI 2: Student Attendance */}
+            <div className="sm-kpi-card">
+              <div className="sm-kpi-icon-box" style={{ background: attendanceRate < 75 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(253, 180, 42, 0.15)' }}>
+                <span className="material-symbols-outlined" style={{ color: attendanceRate < 75 ? '#ef4444' : 'var(--brand-primary-dark)', fontSize: 26 }}>how_to_reg</span>
               </div>
-            )}
+              <div>
+                <div className="sm-kpi-value">{attendanceRate}%</div>
+                <div className="sm-kpi-label">Student Attendance</div>
+              </div>
+            </div>
+
+            {/* KPI 3: Pending Grievances */}
+            <div className="sm-kpi-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/faculty')}>
+              <div className="sm-kpi-icon-box" style={{ background: stats.pendingGrievances > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)' }}>
+                <span className="material-symbols-outlined" style={{ color: stats.pendingGrievances > 0 ? '#ef4444' : '#10b981', fontSize: 26 }}>
+                  {stats.pendingGrievances > 0 ? 'warning' : 'verified'}
+                </span>
+              </div>
+              <div>
+                <div className="sm-kpi-value">{stats.pendingGrievances}</div>
+                <div className="sm-kpi-label">Pending Grievances</div>
+              </div>
+            </div>
+
+            {/* KPI 4: Published Tests */}
+            <div className="sm-kpi-card">
+              <div className="sm-kpi-icon-box" style={{ background: 'rgba(59, 130, 246, 0.12)' }}>
+                <span className="material-symbols-outlined" style={{ color: '#3b82f6', fontSize: 26 }}>quiz</span>
+              </div>
+              <div>
+                <div className="sm-kpi-value">{published.length}</div>
+                <div className="sm-kpi-label">Active Published Tests</div>
+              </div>
+            </div>
           </div>
 
-          {/* Retention Risk Queue (Red Flags) */}
+          {/* Rohan's Personal Schedule (If teaching today) */}
+          {rohanLecturesToday.length > 0 && (
+            <div className="sm-personal-schedule-card">
+              <div className="sm-personal-schedule-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary-dark)', fontSize: 20 }}>
+                    menu_book
+                  </span>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                    My Scheduled Lectures Today (Rohan Sir)
+                  </h3>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {currentDay}, {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}
+                </span>
+              </div>
+
+              <div className="sm-personal-lectures-row">
+                {rohanLecturesToday.map((lect, idx) => (
+                  <div key={idx} className="sm-lecture-chip">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{lect.batch}</strong>
+                      <span className="badge badge-branch-manager" style={{ fontSize: 10, padding: '1px 6px' }}>{lect.subject}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}>
+                      <span>🕒 {lect.slot.split(' ')[0]}</span>
+                      <span>🏫 {lect.room}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Retention Risk Queue (Red Flags by Teachers) */}
           {flaggedStudents.length > 0 && (
-            <div style={{ background: '#fff1f2', border: '1px solid #fda4af', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ background: '#fff1f2', border: '1px solid #fda4af', padding: '18px 20px', borderRadius: 'var(--radius-lg)' }}>
               <h3 style={{ color: '#be123c', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#be123c' }}>flag</span>
-                Retention Risk Queue (Red Flagged by Teachers)
+                Retention Risk Queue (Teacher Red-Flags)
               </h3>
               <div className="grid-auto-300" style={{ gap: '12px' }}>
                 {flaggedStudents.map(student => (
-                  <div key={student.id} style={{ background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div key={student.id} style={{ background: '#fff', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <strong style={{ fontSize: '13px', color: '#be123c' }}>{student.studentName || student.fullName} ({student.batch})</strong>
                       <span className="badge" style={{ fontSize: 10, background: '#ffe4e6', color: '#be123c' }}>Risk Alert</span>
@@ -651,16 +688,16 @@ export default function ServiceManagerDashboard({ profile }) {
             </div>
           )}
 
-          {/* Scheduled PTM Escalations */}
+          {/* Scheduled PTM Escalations (Manager Presence Required) */}
           {escalatedPTMs.length > 0 && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '18px 20px', borderRadius: 'var(--radius-lg)' }}>
               <h3 style={{ color: '#d97706', margin: '0 0 12px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#d97706' }}>groups</span>
                 PTM Escalations (Manager Presence Required)
               </h3>
               <div className="grid-auto-300" style={{ gap: '12px' }}>
                 {escalatedPTMs.map((ptm, idx) => (
-                  <div key={idx} style={{ background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #fcd34d', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div key={idx} style={{ background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #fcd34d', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <strong style={{ fontSize: '13px', color: '#b45309' }}>{ptm.studentName} ({ptm.batch})</strong>
                       <span className="badge" style={{ fontSize: 10, background: '#fef3c7', color: '#b45309' }}>
@@ -674,7 +711,7 @@ export default function ServiceManagerDashboard({ profile }) {
                     <button 
                       onClick={() => handleResolvePTM(ptm.studentId, ptm.createdAt, ptm.teacherId)}
                       className="btn btn-sm" 
-                      style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '4px', alignSelf: 'flex-start', marginTop: '6px', fontSize: '11px', cursor: 'pointer', padding: '4px 10px' }}
+                      style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '6px', alignSelf: 'flex-start', marginTop: '6px', fontSize: '11px', cursor: 'pointer', padding: '5px 12px', fontWeight: 600 }}
                     >
                       Resolve Meeting
                     </button>
@@ -684,30 +721,35 @@ export default function ServiceManagerDashboard({ profile }) {
             </div>
           )}
 
-          {/* ZONE 2: Daily Operations Center */}
-          <div className="service-ops-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+          {/* ── Main Operations Center 2-Column Grid ── */}
+          <div className="sm-ops-grid">
             
-            {/* Classroom Monitor (Kaksh Map) */}
-            <div className="portal-card" style={{ padding: '20px 24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                <h2 style={{ fontSize: 16, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>layers</span>
-                  Kaksh Live Activity Map
-                </h2>
+            {/* Left: Kaksh Live Activity Map (Classroom Radar) */}
+            <div className="sm-radar-card">
+              <div className="sm-radar-topbar">
+                <div>
+                  <h2 style={{ fontSize: 17, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)' }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>layers</span>
+                    Kaksh Live Activity Map
+                  </h2>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                    Live classroom allocation across 6 main halls
+                  </p>
+                </div>
                 
-                {/* Slot Selector */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {/* Segmented Slot Selector */}
+                <div className="sm-slot-pill-group">
                   <button 
                     onClick={() => setSelectedSlotOverride('auto')}
-                    className={`slot-btn ${selectedSlotOverride === 'auto' ? 'active' : ''}`}
+                    className={`sm-slot-pill ${selectedSlotOverride === 'auto' ? 'active' : ''}`}
                   >
-                    Active Now {autoActiveSlot ? `(${autoActiveSlot.split(' ')[0]})` : '(None)'}
+                    Active Now {autoActiveSlot ? `(${autoActiveSlot.split(' ')[0]})` : ''}
                   </button>
                   {SLOTS.map((slot) => (
                     <button 
                       key={slot}
                       onClick={() => setSelectedSlotOverride(slot)}
-                      className={`slot-btn ${selectedSlotOverride === slot ? 'active' : ''}`}
+                      className={`sm-slot-pill ${selectedSlotOverride === slot ? 'active' : ''}`}
                     >
                       {slot.split(' ')[0]} - {slot.split(' TO ')[1].split(' ')[0]}
                     </button>
@@ -715,8 +757,8 @@ export default function ServiceManagerDashboard({ profile }) {
                 </div>
               </div>
 
-              {/* Classroom Cards Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+              {/* Classroom Radar Grid */}
+              <div className="sm-radar-grid">
                 {CLASSROOMS.map((room) => {
                   const lecture = activeSlot ? getClassroomLecture(room, activeSlot) : null;
                   const isLiveNow = selectedSlotOverride === 'auto' && autoActiveSlot && lecture;
@@ -726,58 +768,45 @@ export default function ServiceManagerDashboard({ profile }) {
                   return (
                     <div 
                       key={room} 
-                      style={{ 
-                        background: 'var(--surface-base)', 
-                        border: lecture ? '1px solid rgba(253, 180, 42, 0.25)' : '1px solid var(--surface-border)', 
-                        borderRadius: '12px', 
-                        padding: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        minHeight: '130px',
-                        boxShadow: lecture ? '0 4px 12px rgba(253, 180, 42, 0.03)' : 'none',
-                        transition: 'all 0.2s ease'
-                      }}
+                      className={`sm-room-card ${isLiveNow ? 'live-now' : lecture ? 'scheduled' : 'vacant'}`}
                     >
                       <div>
                         {/* Room Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{room}</span>
+                        <div className="sm-room-header">
+                          <span className="sm-room-code">{room}</span>
                           {lecture ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 600, color: 'var(--status-success)' }}>
-                              {isLiveNow ? <span className="room-pulse-dot" /> : '●'} {isLiveNow ? 'Live' : 'Scheduled'}
+                            <span className="sm-room-badge-live">
+                              {isLiveNow && <span className="sm-live-dot" />}
+                              {isLiveNow ? 'Live Session' : 'Scheduled'}
                             </span>
                           ) : (
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>● Vacant</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>
+                              Vacant
+                            </span>
                           )}
                         </div>
 
                         {/* Lecture Details */}
                         {lecture ? (
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{lecture.batch}</span>
-                              <span style={{ fontSize: 9, background: 'rgba(253, 180, 42, 0.12)', color: 'var(--brand-primary-dark)', padding: '1px 6px', borderRadius: '10px', fontWeight: 600 }}>
-                                {lecture.subject}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                              👨‍🏫 {lecture.teacherName}
+                          <div style={{ marginTop: 6 }}>
+                            <div className="sm-room-batch">{lecture.batch}</div>
+                            <span className="sm-room-subject">{lecture.subject}</span>
+                            <div className="sm-room-teacher">
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-muted)' }}>person</span>
+                              <span>{lecture.teacherName}</span>
                             </div>
                           </div>
                         ) : (
-                          <div style={{ padding: '4px 0', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            Vacant (No lectures scheduled)
+                          <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Hall free for study or makeup tests
                           </div>
                         )}
                       </div>
 
                       {/* Next Lecture Footer */}
                       {nextLecture && (
-                        <div style={{ borderTop: '1px solid var(--surface-border)', paddingTop: 8, fontSize: 10, color: 'var(--text-muted)' }}>
-                          <span style={{ fontWeight: 600 }}>Next: </span>
-                          {nextLecture.batch} ({nextLecture.subject.split(' ')[0]})
+                        <div className="sm-room-next-footer">
+                          <strong>Next:</strong> {nextLecture.batch} ({nextLecture.subject.split(' ')[0]})
                         </div>
                       )}
                     </div>
@@ -786,118 +815,142 @@ export default function ServiceManagerDashboard({ profile }) {
               </div>
             </div>
 
-            {/* Teacher Check-in List */}
-            <div className="portal-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-              <h2 style={{ fontSize: 16, marginBottom: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>how_to_reg</span>
-                Teacher Check-in status
-              </h2>
-
-              <div style={{ overflowY: 'auto', maxHeight: '380px', paddingRight: '4px' }}>
-                {teachers.length === 0 ? (
-                  <div className="empty-state">No active faculty found.</div>
-                ) : (
-                  teachers.map((teacher) => {
-                    const status = getTeacherStatus(teacher.id);
-                    return (
-                      <div key={teacher.id} className="teacher-presence-row">
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{teacher.fullName}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: '140px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{teacher.email}</div>
-                        </div>
-                        <div>
-                          {status.type === 'present' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                              <span className="badge" style={{ background: '#d1fae5', color: '#065f46', fontSize: 10, padding: '2px 8px' }}>
-                                Present
-                              </span>
-                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                                In: {status.punchIn}
-                              </span>
-                              {status.status === 'Late' && (
-                                <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', fontSize: 8, padding: '1px 4px', zoom: 0.9 }}>
-                                  Late Check-in
-                                </span>
-                              )}
-                            </div>
-                          ) : status.type === 'leave' ? (
-                            <span className="badge" style={{ background: '#fef3c7', color: '#92400e', fontSize: 10, padding: '2px 8px' }}>
-                              On Leave
-                            </span>
-                          ) : (
-                            <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, padding: '2px 8px' }}>
-                              Absent
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Faculty Leave Approvals Tray */}
-            <div className="portal-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <h2 style={{ fontSize: 15, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>flight_takeoff</span>
-                  Faculty Leave Approvals
-                </h2>
-                {pendingLeaves.length > 0 && (
-                  <span className="badge" style={{ background: '#fef3c7', color: '#b45309', fontSize: 11, fontWeight: 700 }}>
-                    {pendingLeaves.length} Pending
+            {/* Right: Workforce Presence & Headcount Hub */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              
+              {/* Teacher Check-in List */}
+              <div className="sm-presence-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h2 style={{ fontSize: 16, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>how_to_reg</span>
+                    Teacher Check-in Status
+                  </h2>
+                  <span className="badge badge-branch-manager" style={{ fontSize: 11 }}>
+                    {presentTeachersCount} / {totalTeachersCount}
                   </span>
-                )}
+                </div>
+
+                {/* Filter Input */}
+                <input
+                  type="text"
+                  placeholder="Search faculty name or email..."
+                  className="sm-presence-search"
+                  value={teacherSearch}
+                  onChange={(e) => setTeacherSearch(e.target.value)}
+                />
+
+                <div className="sm-presence-list">
+                  {filteredTeachers.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '20px 0' }}>No matching teachers found.</div>
+                  ) : (
+                    filteredTeachers.map((teacher) => {
+                      const status = getTeacherStatus(teacher.id);
+                      return (
+                        <div key={teacher.id} className="sm-presence-item">
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                              {teacher.fullName}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {teacher.assignedBatches?.join(', ') || teacher.subjects?.join(', ') || 'Faculty'}
+                            </div>
+                          </div>
+                          <div>
+                            {status.type === 'present' ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                <span className="badge" style={{ background: '#d1fae5', color: '#065f46', fontSize: 10, padding: '2px 8px' }}>
+                                  Present
+                                </span>
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                  In: {status.punchIn}
+                                </span>
+                                {status.status === 'Late' && (
+                                  <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', fontSize: 9, padding: '1px 5px' }}>
+                                    Late
+                                  </span>
+                                )}
+                              </div>
+                            ) : status.type === 'leave' ? (
+                              <span className="badge" style={{ background: '#fef3c7', color: '#92400e', fontSize: 10, padding: '2px 8px' }}>
+                                On Leave
+                              </span>
+                            ) : (
+                              <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, padding: '2px 8px' }}>
+                                Absent
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '280px', overflowY: 'auto' }}>
-                {pendingLeaves.length === 0 ? (
-                  <div style={{ padding: '16px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                    ✓ All faculty leave requests reviewed.
-                  </div>
-                ) : (
-                  pendingLeaves.map(req => (
-                    <div key={req.id} style={{ background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{req.teacherName || 'Faculty Member'}</strong>
-                          <span style={{ marginLeft: 6, fontSize: 10, background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>
-                            {req.type || 'Leave'}
+              {/* Faculty Leave Approvals Tray */}
+              <div className="sm-leave-tray">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ fontSize: 15, margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ color: '#f59e0b' }}>flight_takeoff</span>
+                    Faculty Leave Requests
+                  </h2>
+                  {pendingLeaves.length > 0 && (
+                    <span className="badge" style={{ background: '#fef3c7', color: '#b45309', fontSize: 11, fontWeight: 700 }}>
+                      {pendingLeaves.length} Pending
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '280px', overflowY: 'auto' }}>
+                  {pendingLeaves.length === 0 ? (
+                    <div style={{ padding: '20px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, border: '1px dashed var(--surface-border)', borderRadius: 'var(--radius-md)' }}>
+                      <span className="material-symbols-outlined" style={{ color: '#10b981', fontSize: 24, display: 'block', marginBottom: 4 }}>verified</span>
+                      All faculty leave requests are reviewed.
+                    </div>
+                  ) : (
+                    pendingLeaves.map(req => (
+                      <div key={req.id} className="sm-leave-item">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{req.teacherName || 'Faculty Member'}</strong>
+                            <span style={{ marginLeft: 6, fontSize: 10, background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}>
+                              {req.type || 'Leave'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-primary-dark)' }}>
+                            {req.totalDays || 1} Days
                           </span>
                         </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand-primary-dark)' }}>
-                          {req.totalDays || 1}d
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        📅 {req.startDate} ➔ {req.endDate}
-                      </div>
-                      {req.reason && (
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', background: '#fff', padding: '6px 8px', borderRadius: 4, border: '1px solid #f1f5f9' }}>
-                          "{req.reason}"
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          📅 {req.startDate} to {req.endDate}
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                        <button
-                          onClick={() => handleApproveLeave(req.id)}
-                          className="btn btn-sm"
-                          style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectLeave(req.id)}
-                          className="btn btn-sm"
-                          style={{ flex: 1, background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          Reject
-                        </button>
+                        {req.reason && (
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', background: '#fff', padding: '6px 8px', borderRadius: 4, border: '1px solid var(--surface-border)' }}>
+                            "{req.reason}"
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                          <button
+                            onClick={() => handleApproveLeave(req.id)}
+                            className="btn btn-sm"
+                            style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectLeave(req.id)}
+                            className="btn btn-sm"
+                            style={{ flex: 1, background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, padding: '5px 0', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
+
             </div>
 
           </div>
@@ -905,13 +958,15 @@ export default function ServiceManagerDashboard({ profile }) {
         </div>
       )}
 
-      {/* ANALYTICS SUBTAB */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SUBTAB 2: DEEP ANALYTICS & ACADEMIC FEEDS
+          ══════════════════════════════════════════════════════════════════════ */}
       {subTab === 'analytics' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
-          {/* Active Alerts Banner */}
+          {/* Active Operational Alerts Banner */}
           {systemAlerts.length > 0 ? (
-            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '16px', borderRadius: '12px' }}>
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '16px 20px', borderRadius: 'var(--radius-lg)' }}>
               <h3 style={{ color: '#b45309', margin: '0 0 10px 0', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#b45309' }}>warning</span>
                 System Operational Alerts ({systemAlerts.length})
@@ -928,18 +983,18 @@ export default function ServiceManagerDashboard({ profile }) {
               </div>
             </div>
           ) : (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 18px', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', gap: 10 }}>
               <span className="material-symbols-outlined" style={{ color: '#15803d', fontSize: 20 }}>check_circle</span>
-              <span style={{ fontSize: 13, color: '#166534', fontWeight: 600 }}>All operational systems are stable. No alerts generated.</span>
+              <span style={{ fontSize: 13, color: '#166534', fontWeight: 600 }}>All academic operational systems are running stably. Zero alerts generated.</span>
             </div>
           )}
 
-          {/* Charts Row - Symmetrical 2x2 Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 24 }}>
+          {/* Symmetrical 2x2 Analytics Grid */}
+          <div className="sm-analytics-grid">
             
             {/* Chart 1: 7-Day Attendance Trend */}
-            <div className="portal-card" style={{ padding: '24px' }}>
-              <h2 style={{ fontSize: 16, marginBottom: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="sm-chart-card">
+              <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="material-symbols-outlined" style={{ color: 'var(--brand-primary)' }}>ssid_chart</span>
                 7-Day Student Attendance Trend
               </h2>
@@ -952,9 +1007,9 @@ export default function ServiceManagerDashboard({ profile }) {
                         <stop offset="95%" stopColor="var(--brand-primary)" stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-border)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                     <Area type="monotone" dataKey="rate" name="Attendance %" stroke="var(--brand-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorAtt)" />
                   </AreaChart>
@@ -963,8 +1018,8 @@ export default function ServiceManagerDashboard({ profile }) {
             </div>
 
             {/* Chart 2: Global Teacher Performance */}
-            <div className="portal-card" style={{ padding: '24px' }}>
-              <h2 style={{ fontSize: 16, marginBottom: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="sm-chart-card">
+              <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="material-symbols-outlined" style={{ color: '#8b5cf6' }}>trending_up</span>
                 Global Teacher Performance
               </h2>
@@ -977,9 +1032,9 @@ export default function ServiceManagerDashboard({ profile }) {
                         <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-border)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                     <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                     <Area type="monotone" dataKey="avgScore" name="Avg Score" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorPerf)" />
                   </AreaChart>
@@ -988,18 +1043,18 @@ export default function ServiceManagerDashboard({ profile }) {
             </div>
 
             {/* Chart 3: Syllabus Completion */}
-            <div className="portal-card" style={{ padding: '24px' }}>
-              <h2 style={{ fontSize: 16, marginBottom: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="sm-chart-card">
+              <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="material-symbols-outlined" style={{ color: '#10b981' }}>menu_book</span>
                 Top 10 Batch Syllabus Completion
               </h2>
               <div style={{ height: 220, width: '100%' }}>
                 <ResponsiveContainer>
                   <BarChart data={syllabusData} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: '#f5f5f5' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'var(--surface-bg)' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                     <Bar dataKey="avgProgress" name="Avg Completion %" radius={[6, 6, 0, 0]}>
                       {syllabusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.avgProgress < 40 ? '#ef4444' : entry.avgProgress > 80 ? '#10b981' : 'var(--brand-primary)'} />
@@ -1011,8 +1066,8 @@ export default function ServiceManagerDashboard({ profile }) {
             </div>
 
             {/* Chart 4: Faculty Workload */}
-            <div className="portal-card" style={{ padding: '24px' }}>
-              <h2 style={{ fontSize: 16, marginBottom: 24, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="sm-chart-card">
+              <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="material-symbols-outlined" style={{ color: '#6366f1' }}>groups</span>
                 Faculty Workload (Weekly Lectures)
               </h2>
@@ -1020,8 +1075,8 @@ export default function ServiceManagerDashboard({ profile }) {
                 <ResponsiveContainer>
                   <BarChart data={workloadData} layout="vertical" margin={{ top: 0, right: 10, left: -15, bottom: 0 }}>
                     <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11, fill: '#555' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: 'var(--surface-bg)' }} contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                     <Bar dataKey="count" name="Weekly Lectures" radius={[0, 6, 6, 0]} barSize={16}>
                       {workloadData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={index < 3 ? '#6366f1' : '#a5b4fc'} />
@@ -1034,18 +1089,18 @@ export default function ServiceManagerDashboard({ profile }) {
 
           </div>
 
-          {/* Pipelines and Feeds Row - Symmetrical Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 24 }}>
+          {/* Pipelines and Feeds 2-Column Grid */}
+          <div className="sm-analytics-grid">
             
-            {/* Visual Test duty pipeline */}
-            <div className="portal-card" style={{ padding: '24px' }}>
+            {/* Test Duty Pipeline */}
+            <div className="sm-chart-card">
               <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="material-symbols-outlined" style={{ color: '#f59e0b', fontSize: 20 }}>account_tree</span>
-                Test Duty Pipeline
+                Saturday Test Duty Pipeline
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
                 
-                {/* Drafted column */}
+                {/* Drafted */}
                 <div className="pipeline-column">
                   <div className="pipeline-column-header">
                     <h3 className="pipeline-stage-title" style={{ color: '#6b7280' }}>Drafted</h3>
@@ -1068,7 +1123,7 @@ export default function ServiceManagerDashboard({ profile }) {
                   </div>
                 </div>
 
-                {/* Published column */}
+                {/* Published */}
                 <div className="pipeline-column" style={{ background: 'rgba(34, 197, 94, 0.01)', borderColor: 'rgba(34, 197, 94, 0.12)' }}>
                   <div className="pipeline-column-header">
                     <h3 className="pipeline-stage-title" style={{ color: '#166534' }}>Published</h3>
@@ -1096,7 +1151,7 @@ export default function ServiceManagerDashboard({ profile }) {
                   </div>
                 </div>
 
-                {/* Graded column */}
+                {/* Graded */}
                 <div className="pipeline-column" style={{ background: 'rgba(253, 180, 42, 0.01)', borderColor: 'rgba(253, 180, 42, 0.12)' }}>
                   <div className="pipeline-column-header">
                     <h3 className="pipeline-stage-title" style={{ color: '#92400e' }}>Graded</h3>
@@ -1123,15 +1178,15 @@ export default function ServiceManagerDashboard({ profile }) {
               </div>
             </div>
 
-            {/* Post-Lecture reports Timeline feed */}
-            <div className="portal-card" style={{ padding: '24px' }}>
+            {/* Post-Lecture Reports Timeline feed */}
+            <div className="sm-chart-card">
               <h2 style={{ fontSize: 16, marginBottom: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, color: '#10b981' }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 20 }}>description</span>
-                Class Timeline Feed (Post-Lecture Reports)
+                Post-Lecture Reports Feed
               </h2>
               <div style={{ maxHeight: '310px', overflowY: 'auto', paddingRight: '4px' }}>
                 {lectureReports.length === 0 ? (
-                  <div className="empty-state">No lecture reports submitted yet.</div>
+                  <div className="empty-state">No lecture reports submitted yet today.</div>
                 ) : (
                   <div className="timeline-container">
                     {lectureReports.slice(0, 10).map((rep) => (

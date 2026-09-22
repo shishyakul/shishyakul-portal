@@ -72,9 +72,12 @@ export default function PendingAdmissions() {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'students'), where('status', '==', 'pending_admission'));
+    // Listen for both explicit pending_admissions AND completed demos awaiting finalization
+    const q = query(collection(db, 'students'), where('status', 'in', ['pending_admission', 'demo']));
     const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(s => s.status === 'pending_admission' || (s.status === 'demo' && s.demoCompletionStatus === 'completed'));
       setPendingStudents(data);
       setLoading(false);
     });

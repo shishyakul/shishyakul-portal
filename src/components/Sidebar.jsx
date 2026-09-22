@@ -8,6 +8,7 @@ const ROLE_BADGE = {
   branch_manager: 'badge-branch-manager', 
   service_manager: 'badge-service-manager', 
   front_desk_manager: 'badge-front-desk',
+  frontend_desk_manager: 'badge-front-desk',
   inventory_manager: 'badge-inventory-manager',
   teacher: 'badge-teacher',
   student: 'badge-student'
@@ -57,6 +58,16 @@ const NAV_CONFIG = {
     { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
   ],
   front_desk_manager: [
+    { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
+    { to: '/enquiries',   icon: 'person_add',      label: 'Walk-in Enquiries' },
+    { to: '/pending-admissions', icon: 'assignment_ind', label: 'Pending Admissions' },
+    { to: '/students',    icon: 'school',          label: 'Students' },
+    { to: '/attendance',  icon: 'event_available', label: 'Daily Attendance' },
+    { to: '/inventory',   icon: 'inventory_2',     label: 'Asset Ledger' },
+    { to: '/dashboard#personal_attendance', icon: 'event_available', label: 'My Attendance' },
+    { to: '/dashboard#personal_salary', icon: 'account_balance_wallet', label: 'My Salary' },
+  ],
+  frontend_desk_manager: [
     { to: '/dashboard',   icon: 'dashboard',       label: 'Dashboard' },
     { to: '/enquiries',   icon: 'person_add',      label: 'Walk-in Enquiries' },
     { to: '/pending-admissions', icon: 'assignment_ind', label: 'Pending Admissions' },

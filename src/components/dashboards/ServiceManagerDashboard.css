@@ -1,0 +1,616 @@
+/* ================================================================
+   ServiceManagerDashboard.css — Academic Operations Command Cockpit
+   Modern, Apple & Bento-inspired UI for Service / Academic Management
+   ================================================================ */
+
+.sm-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 40px;
+  animation: smFadeIn 0.3s ease-out;
+}
+
+@keyframes smFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Top Briefing Header Card ── */
+.sm-header-card {
+  background: linear-gradient(135deg, rgba(253, 180, 42, 0.08) 0%, rgba(255, 255, 255, 0.95) 100%);
+  border: 1px solid rgba(253, 180, 42, 0.25);
+  border-radius: var(--radius-xl);
+  padding: 24px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.sm-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sm-header-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sm-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.sm-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+  animation: smPulse 2s infinite;
+}
+
+@keyframes smPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.sm-header-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.sm-header-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.sm-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sm-time-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
+
+.sm-time-clock {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-primary-dark);
+}
+
+.sm-date-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-left: 1px solid var(--surface-border);
+  padding-left: 10px;
+}
+
+/* ── Segmented Sub-Tab Switcher ── */
+.sm-tab-bar {
+  display: flex;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  gap: 4px;
+  width: fit-content;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.sm-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sm-tab-btn.active {
+  background: var(--brand-primary);
+  color: #111827;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(253, 180, 42, 0.3);
+}
+
+.sm-tab-btn:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--surface-bg);
+}
+
+/* ── Bento Action Grid ── */
+.sm-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .sm-bento-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .sm-bento-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sm-action-tile {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 125px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.sm-action-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.sm-action-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.sm-tile-gold::before { background: var(--brand-primary); }
+.sm-tile-gold:hover { border-color: rgba(253, 180, 42, 0.5); }
+
+.sm-tile-indigo::before { background: #6366f1; }
+.sm-tile-indigo:hover { border-color: rgba(99, 102, 241, 0.5); }
+
+.sm-tile-emerald::before { background: #10b981; }
+.sm-tile-emerald:hover { border-color: rgba(16, 185, 129, 0.5); }
+
+.sm-tile-rose::before { background: #f43f5e; }
+.sm-tile-rose:hover { border-color: rgba(244, 63, 94, 0.5); }
+
+.sm-tile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.sm-tile-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-tile-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.sm-tile-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sm-tile-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+/* ── Primary KPI Strip ── */
+.sm-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .sm-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .sm-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sm-kpi-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sm-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+}
+
+.sm-kpi-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sm-kpi-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.sm-kpi-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* ── Rohan's Personal Schedule Banner ── */
+.sm-personal-schedule-card {
+  background: linear-gradient(135deg, rgba(253, 180, 42, 0.06) 0%, var(--surface-card) 100%);
+  border: 1px solid rgba(253, 180, 42, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sm-personal-schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sm-personal-lectures-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.sm-lecture-chip {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+/* ── Operations Center 2-Column Grid ── */
+.sm-ops-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .sm-ops-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Classroom Monitor (Kaksh Live Activity Map) ── */
+.sm-radar-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+}
+
+.sm-radar-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.sm-slot-pill-group {
+  display: flex;
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.sm-slot-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-slot-pill.active {
+  background: var(--brand-primary);
+  color: #111827;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(253, 180, 42, 0.25);
+}
+
+.sm-radar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.sm-room-card {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.sm-room-card.live-now {
+  background: #ffffff;
+  border: 1.5px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08);
+}
+
+.sm-room-card.live-now::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #10b981;
+}
+
+.sm-room-card.scheduled {
+  background: #ffffff;
+  border: 1px solid rgba(253, 180, 42, 0.35);
+}
+
+.sm-room-card.vacant {
+  opacity: 0.75;
+}
+
+.sm-room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sm-room-code {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.sm-room-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.sm-room-batch {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.sm-room-subject {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brand-primary-dark);
+  background: rgba(253, 180, 42, 0.12);
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.sm-room-teacher {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.sm-room-next-footer {
+  border-top: 1px solid var(--surface-border);
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Teacher Presence Card ── */
+.sm-presence-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sm-presence-search {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border);
+  font-size: 12px;
+  background: var(--surface-bg);
+  width: 100%;
+  margin-bottom: 12px;
+  outline: none;
+}
+
+.sm-presence-search:focus {
+  border-color: var(--brand-primary);
+}
+
+.sm-presence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sm-presence-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--surface-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border);
+  transition: background 0.15s ease;
+}
+
+.sm-presence-item:hover {
+  background: #fff;
+  border-color: rgba(0,0,0,0.12);
+}
+
+/* ── Faculty Leave Approvals Tray ── */
+.sm-leave-tray {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sm-leave-item {
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Analytics 2x2 Grid ── */
+.sm-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 600px) {
+  .sm-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sm-chart-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.02);
+}

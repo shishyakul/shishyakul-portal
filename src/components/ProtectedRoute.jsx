@@ -26,7 +26,9 @@ export default function ProtectedRoute({ children, adminOnly = false, allowedRol
   }
 
   if (!user) {
-    window.location.href = 'https://shishyakul.in/login';
+    window.location.href = window.location.hostname === 'localhost'
+      ? 'http://localhost:5173/login'
+      : 'https://shishyakul.in/login';
     return null;
   }
 

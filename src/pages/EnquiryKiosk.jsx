@@ -1,12 +1,27 @@
-import React, { useState, useRef } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
 import SignatureCanvas from 'react-signature-canvas';
 import { db } from '../firebase';
 import './EnquiryKiosk.css';
 
 export default function EnquiryKiosk() {
+  const [activeTab, setActiveTab] = useState('form'); // 'form' or 'log'
+  const [enquiriesLog, setEnquiriesLog] = useState([]);
+  const [logLoading, setLogLoading] = useState(true);
+  const [logSearch, setLogSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'students'), where('status', '==', 'enquiry'));
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a, b) => new Date(b.enquiryDate || b.createdAt || 0) - new Date(a.enquiryDate || a.createdAt || 0));
+      setEnquiriesLog(docs);
+      setLogLoading(false);
+    });
+    return () => unsub();
+  }, []);
   const [formData, setFormData] = useState({
     enquiryDate: new Date().toISOString().split('T')[0],
     reference: 'banner',
@@ -121,11 +136,42 @@ export default function EnquiryKiosk() {
     setLoading(false);
   };
 
+  const filteredLog = enquiriesLog.filter(e => {
+    if (!logSearch.trim()) return true;
+    const q = logSearch.toLowerCase();
+    const name = (e.studentName || '').toLowerCase();
+    const phone = (e.contactNo || e.parentContact || '').toLowerCase();
+    const parent = (e.parentName || '').toLowerCase();
+    return name.includes(q) || phone.includes(q) || parent.includes(q);
+  });
+
   return (
     <div className="enquiry-container">
       <div className="enquiry-header">
         <h1>Digital Enquiry Kiosk</h1>
         <p>Register walk-in students and auto-push them to the Admission Kanban Pipeline.</p>
+      </div>
+
+      {/* Subtab Switcher */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, borderBottom: '1px solid var(--surface-border)', paddingBottom: 16 }}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('form')}
+          className={`btn ${activeTab === 'form' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '8px', fontWeight: 600 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>edit_note</span>
+          New Walk-in Registration
+        </button>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('log')}
+          className={`btn ${activeTab === 'log' ? 'btn-primary' : 'btn-ghost'}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: '8px', fontWeight: 600 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>format_list_bulleted</span>
+          Registered Enquiries Log ({enquiriesLog.length})
+        </button>
       </div>
 
       {successMsg && (
@@ -134,6 +180,7 @@ export default function EnquiryKiosk() {
         </div>
       )}
 
+      {activeTab === 'form' ? (
       <form className="enquiry-form" onSubmit={handleSubmit}>
         
         {/* Office Details */}
@@ -378,6 +425,117 @@ export default function EnquiryKiosk() {
         </div>
 
       </form>
+      ) : (
+        /* Registered Enquiries Log Table View */
+        <div className="portal-card" style={{ padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Registered Walk-in Enquiries</h2>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>All walk-in student registrations in the pipeline.</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 260 }}>
+              <input 
+                type="text"
+                placeholder="Search by student, parent, or phone..."
+                value={logSearch}
+                onChange={e => setLogSearch(e.target.value)}
+                style={{ 
+                  padding: '8px 14px', 
+                  borderRadius: '8px', 
+                  border: '1px solid var(--surface-border)',
+                  fontSize: 13,
+                  width: '100%',
+                  background: 'var(--surface-bg)'
+                }}
+              />
+            </div>
+          </div>
+
+          {logLoading ? (
+            <div className="empty-state"><div className="spinner" /></div>
+          ) : filteredLog.length === 0 ? (
+            <div className="empty-state" style={{ padding: '32px 0' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--text-muted)' }}>search_off</span>
+              <p style={{ margin: '8px 0 0 0', color: 'var(--text-secondary)' }}>No enquiries found matching your search.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>Student Name</th>
+                    <th>Standard & Board</th>
+                    <th>Parent / Contact</th>
+                    <th>Reference</th>
+                    <th>Enquiry Date</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLog.map(item => {
+                    const phone = (item.contactNo || item.parentContact || '').replace(/[^0-9]/g, '');
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                            {item.studentName || 'Unnamed'}
+                          </div>
+                          {item.schoolName && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.schoolName}</div>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge badge-branch-manager" style={{ fontSize: 11 }}>
+                            {item.standard || '10th'} {item.board || ''}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{item.parentName || 'Parent'}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>📞 {item.contactNo || item.parentContact || 'N/A'}</div>
+                        </td>
+                        <td>
+                          <span className="badge" style={{ fontSize: 11, textTransform: 'capitalize', background: 'var(--surface-bg)' }}>
+                            {item.reference || 'Walk-in'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          {item.enquiryDate || (item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Recent')}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: 6 }}>
+                            {phone && (
+                              <>
+                                <a 
+                                  href={`tel:${phone}`} 
+                                  className="btn-icon"
+                                  title="Call Student / Parent"
+                                  style={{ width: 30, height: 30, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', color: '#2563eb' }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>call</span>
+                                </a>
+                                <a 
+                                  href={`https://wa.me/91${phone.slice(-10)}`} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className="btn-icon"
+                                  title="WhatsApp"
+                                  style={{ width: 30, height: 30, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-bg)', border: '1px solid var(--surface-border)', color: '#16a34a' }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
+                                </a>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

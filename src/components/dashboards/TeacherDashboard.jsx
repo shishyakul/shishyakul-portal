@@ -472,6 +472,7 @@ export default function TeacherDashboard({ profile }) {
   const [timetable, setTimetable] = useState({});
   const [timetableHeaderDate, setTimetableHeaderDate] = useState('');
   const [testWorkflows, setTestWorkflows] = useState({});
+  const [timetableBatchFilter, setTimetableBatchFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
 
   const classTeacherBatches = profile?.classTeacherBatch ? (Array.isArray(profile.classTeacherBatch) ? profile.classTeacherBatch : [profile.classTeacherBatch]) : [];
@@ -3993,202 +3994,165 @@ export default function TeacherDashboard({ profile }) {
       )}
 
       {activeTab === 'timetable' && (
-        <div className="portal-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--surface-border)', borderRadius: '12px' }}>
-          <div style={{ padding: '16px 20px', background: '#fff', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--brand-primary)' }}>calendar_month</span>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>My Weekly Schedule</h2>
-            </div>
-            <div className="badge badge-branch-manager" style={{ padding: '6px 14px', fontSize: '12px', fontWeight: '700' }}>
-              {timetableHeaderDate || 'CURRENT WEEK'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Clean, Compact Header */}
+          <div className="portal-card" style={{ padding: '14px 20px', borderRadius: '12px', background: '#ffffff', border: '1px solid var(--surface-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--brand-primary)' }}>calendar_month</span>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                    My Weekly Timetable
+                  </h2>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Faculty schedule & classroom (Kaksh) allocations
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '5px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: '700', color: '#334155' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--brand-primary)' }}>date_range</span>
+                  Cycle: <span style={{ color: '#0f172a' }}>{timetableHeaderDate || 'CURRENT WEEK'}</span>
+                </div>
+
+                {/* Batch Filter Dropdown */}
+                <select
+                  value={timetableBatchFilter}
+                  onChange={(e) => setTimetableBatchFilter(e.target.value)}
+                  className="portal-select"
+                  style={{ padding: '5px 10px', fontSize: '12px', borderRadius: '6px', height: '32px' }}
+                >
+                  <option value="ALL">All Batches</option>
+                  {[...new Set(Object.values(timetable).flatMap(slot => Object.values(slot || {}).map(c => c?.batch)).filter(Boolean))].map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => window.print()}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '600', color: '#475569', height: '32px' }}
+                  title="Print Timetable"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>print</span>
+                  Print
+                </button>
+              </div>
             </div>
           </div>
 
           {Object.keys(timetable).length === 0 ? (
-            <div className="empty-state" style={{ padding: 32 }}>No timetable has been published yet.</div>
+            <div className="portal-card" style={{ padding: 40, textAlign: 'center', background: '#fff', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 36, color: '#94a3b8', marginBottom: 8 }}>event_busy</span>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: 16, color: '#1e293b' }}>No Timetable Published Yet</h3>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>The management has not published this week's master timetable yet.</p>
+            </div>
           ) : (
-            <div style={{ background: '#fff' }}>
-              {(() => {
-                const daysOfWeek = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-                const slots = ['02:00 PM TO 04:00 PM', '04:30 PM TO 06:30 PM', '07:00 PM TO 09:00 PM'];
+            (() => {
+              const daysOfWeek = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+              const slots = ['02:00 PM TO 04:00 PM', '04:30 PM TO 06:30 PM', '07:00 PM TO 09:00 PM'];
 
-                // Detect current day
-                const currentDayIndex = new Date().getDay(); // 0 = Sun, 1 = Mon, ...
-                const todayName = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][currentDayIndex];
+              const currentDayIndex = new Date().getDay(); // 0 = Sun, 1 = Mon, ...
+              const todayName = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][currentDayIndex];
 
-                // scheduleMatrix[slot][day] = array of lectures
-                const scheduleMatrix = {};
-                slots.forEach(slot => {
-                  scheduleMatrix[slot] = {};
-                  daysOfWeek.forEach(d => { scheduleMatrix[slot][d] = []; });
-                });
+              const scheduleMatrix = {};
+              slots.forEach(slot => {
+                scheduleMatrix[slot] = {};
+                daysOfWeek.forEach(d => { scheduleMatrix[slot][d] = []; });
+              });
 
-                const mapCycleToDays = (label, defaultDays) => {
-                  const l = (label || '').toUpperCase();
-                  if (!l) return defaultDays;
-                  if (l === 'ALL DAYS') return ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+              const mapCycleToDays = (label, defaultDays) => {
+                const l = (label || '').toUpperCase();
+                if (!l) return defaultDays;
+                if (l === 'ALL DAYS') return ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
-                  // Legacy custom handling
-                  if (l === 'MON-WED-FRI') return ['MONDAY', 'WEDNESDAY', 'FRIDAY'];
-                  if (l === 'TUES-THURS-SAT') return ['TUESDAY', 'THURSDAY', 'SATURDAY'];
-                  if (l === 'WEEKENDS') return ['SATURDAY', 'SUNDAY'];
+                if (l === 'MON-WED-FRI') return ['MONDAY', 'WEDNESDAY', 'FRIDAY'];
+                if (l === 'TUES-THURS-SAT') return ['TUESDAY', 'THURSDAY', 'SATURDAY'];
+                if (l === 'WEEKENDS') return ['SATURDAY', 'SUNDAY'];
 
-                  const DAYS_MAP = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-                  const FULL_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+                const DAYS_MAP = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+                const FULL_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
-                  if (l.includes('-')) {
-                    let parts = l.split('-');
-                    let sStr = parts[0].replace('THURS', 'THU').replace('TUES', 'TUE');
-                    let eStr = parts[1].replace('THURS', 'THU').replace('TUES', 'TUE');
-                    let sIdx = DAYS_MAP.indexOf(sStr);
-                    let eIdx = DAYS_MAP.indexOf(eStr);
+                if (l.includes('-')) {
+                  let parts = l.split('-');
+                  let sStr = parts[0].replace('THURS', 'THU').replace('TUES', 'TUE');
+                  let eStr = parts[1].replace('THURS', 'THU').replace('TUES', 'TUE');
+                  let sIdx = DAYS_MAP.indexOf(sStr);
+                  let eIdx = DAYS_MAP.indexOf(eStr);
 
-                    if (sIdx !== -1 && eIdx !== -1) {
-                      let result = [];
-                      for (let i = Math.min(sIdx, eIdx); i <= Math.max(sIdx, eIdx); i++) {
-                        result.push(FULL_DAYS[i]);
-                      }
-                      return result;
+                  if (sIdx !== -1 && eIdx !== -1) {
+                    let result = [];
+                    for (let i = Math.min(sIdx, eIdx); i <= Math.max(sIdx, eIdx); i++) {
+                      result.push(FULL_DAYS[i]);
                     }
-                  } else {
-                    let sStr = l.replace('THURS', 'THU').replace('TUES', 'TUE');
-                    let idx = DAYS_MAP.indexOf(sStr);
-                    if (idx !== -1) return [FULL_DAYS[idx]];
+                    return result;
+                  }
+                } else {
+                  let sStr = l.replace('THURS', 'THU').replace('TUES', 'TUE');
+                  let idx = DAYS_MAP.indexOf(sStr);
+                  if (idx !== -1) return [FULL_DAYS[idx]];
+                }
+
+                return defaultDays;
+              };
+
+              for (const slot of Object.keys(timetable)) {
+                for (const room of Object.keys(timetable[slot] || {})) {
+                  const cell = timetable[slot][room];
+                  if (!cell) continue;
+
+                  if (teacherId && cell?.monWed?.teacherId === teacherId) {
+                    const days = mapCycleToDays(cell.monWedLabel, ['MONDAY', 'TUESDAY', 'WEDNESDAY']);
+                    days.forEach(d => {
+                      if (scheduleMatrix[slot] && scheduleMatrix[slot][d]) {
+                        scheduleMatrix[slot][d].push({ room, batch: cell.batch, subject: cell.monWed.subject, topic: cell.monWed.topic || '', slot });
+                      }
+                    });
                   }
 
-                  return defaultDays;
-                };
-
-                for (const slot of Object.keys(timetable)) {
-                  for (const room of Object.keys(timetable[slot] || {})) {
-                    const cell = timetable[slot][room];
-
-                    if (teacherId && cell?.monWed?.teacherId === teacherId) {
-                      const days = mapCycleToDays(cell.monWedLabel, ['MONDAY', 'TUESDAY', 'WEDNESDAY']);
-                      days.forEach(d => {
-                        if (scheduleMatrix[slot] && scheduleMatrix[slot][d]) {
-                          scheduleMatrix[slot][d].push({ room, batch: cell.batch, subject: cell.monWed.subject, topic: cell.monWed.topic });
-                        }
-                      });
-                    }
-
-                    if (teacherId && cell?.thursSat?.teacherId === teacherId) {
-                      const days = mapCycleToDays(cell.thursSatLabel, ['THURSDAY', 'FRIDAY', 'SATURDAY']);
-                      days.forEach(d => {
-                        if (scheduleMatrix[slot] && scheduleMatrix[slot][d]) {
-                          scheduleMatrix[slot][d].push({ room, batch: cell.batch, subject: cell.thursSat.subject, topic: cell.thursSat.topic });
-                        }
-                      });
-                    }
-
-                    if (teacherId && cell?.extra?.teacherId === teacherId) {
-                      if (scheduleMatrix[slot] && scheduleMatrix[slot]['SUNDAY']) {
-                        scheduleMatrix[slot]['SUNDAY'].push({ room, batch: cell.batch, subject: cell.extra.subject, topic: '', type: 'extra' });
+                  if (teacherId && cell?.thursSat?.teacherId === teacherId) {
+                    const days = mapCycleToDays(cell.thursSatLabel, ['THURSDAY', 'FRIDAY', 'SATURDAY']);
+                    days.forEach(d => {
+                      if (scheduleMatrix[slot] && scheduleMatrix[slot][d]) {
+                        scheduleMatrix[slot][d].push({ room, batch: cell.batch, subject: cell.thursSat.subject, topic: cell.thursSat.topic || '', slot });
                       }
+                    });
+                  }
+
+                  if (teacherId && cell?.extra?.teacherId === teacherId) {
+                    if (scheduleMatrix[slot] && scheduleMatrix[slot]['SUNDAY']) {
+                      scheduleMatrix[slot]['SUNDAY'].push({ room, batch: cell.batch, subject: cell.extra.subject, topic: '', type: 'extra', slot });
                     }
                   }
                 }
+              }
 
-                let totalLectures = 0;
-                slots.forEach(slot => {
-                  daysOfWeek.forEach(d => {
-                    totalLectures += scheduleMatrix[slot][d].length;
-                  });
-                });
+              // Helper for Subject Colors
+              const getSubjectTheme = (subject) => {
+                const s = (subject || '').toLowerCase();
+                if (s.includes('math')) return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+                if (s.includes('phys')) return { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' };
+                if (s.includes('chem')) return { bg: '#ecfeff', color: '#0e7490', border: '#a5f3fc' };
+                if (s.includes('bio')) return { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' };
+                if (s.includes('sci')) return { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' };
+                if (s.includes('eng')) return { bg: '#fdf4ff', color: '#a21caf', border: '#f5d0fe' };
+                if (s.includes('sst') || s.includes('soc')) return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' };
+                if (s.includes('hin') || s.includes('mar')) return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' };
+                return { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1' };
+              };
 
-                if (totalLectures === 0 && upcomingTestDuties.length === 0) {
-                  return <div className="empty-state" style={{ padding: 32 }}>You have no assigned lectures for this week.</div>;
-                }
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                    {upcomingTestDuties.length > 0 && (
-                      <div style={{ margin: '16px 20px 20px 20px', background: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '10px' }}>
-                        <h3 style={{ color: '#92400e', margin: '0 0 12px 0', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#d97706' }}>notification_important</span>
-                          Upcoming Saturday Test Duties ({saturdayDateStr})
-                        </h3>
-                        <div style={{ display: 'grid', gap: '10px' }}>
-                          {upcomingTestDuties.map((duty, idx) => (
-                            <div key={idx} style={{ background: duty.workflow?.status === 'final_published' ? '#f0fdf4' : '#fff', padding: '12px 16px', borderRadius: '8px', border: duty.workflow?.status === 'final_published' ? '1px solid #bbf7d0' : '1px solid #fef3c7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                              <div>
-                                <strong style={{ fontSize: '14px', display: 'block', color: duty.workflow?.status === 'final_published' ? '#166534' : '#0f172a' }}>{duty.batch} — Weekly Test</strong>
-                                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginTop: 3 }}>
-                                  Prepared by: <strong style={{ color: '#334155' }}>{duty.prepName}</strong> | Checked by: <strong style={{ color: '#334155' }}>{duty.checkName}</strong>
-                                </span>
-                                {duty.topic && (
-                                  <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginTop: 2 }}>
-                                    Syllabus: {duty.topic}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                                {duty.isPreparer && (!duty.workflow || duty.workflow.status === 'draft_submitted') && (
-                                  <button
-                                    className="btn-primary btn-sm"
-                                    onClick={() => {
-                                      setDraftModal({ isOpen: true, duty, link: '', startDate });
-                                    }}
-                                    style={{ background: duty.workflow?.status === 'draft_submitted' ? '#16a34a' : '', fontSize: 12 }}
-                                  >
-                                    {duty.workflow?.status === 'draft_submitted' ? 'Draft Submitted ✓' : 'Submit Draft Link'}
-                                  </button>
-                                )}
-
-                                {duty.workflow?.finalLink && (
-                                  <a href={duty.workflow.finalLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
-                                    Test Paper
-                                  </a>
-                                )}
-
-                                {duty.workflow?.solutionsLink && (
-                                  <a href={duty.workflow.solutionsLink} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', fontSize: 12, fontWeight: '600', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>task_alt</span>
-                                    Solutions
-                                  </a>
-                                )}
-
-                                {duty.isChecker && duty.workflow?.status === 'final_published' && (
-                                  <button className="btn-primary btn-sm" style={{ padding: '6px 12px', fontSize: 12 }} onClick={async () => {
-                                    const { getDocs, query, collection, where } = await import('firebase/firestore');
-                                    const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', duty.batch)));
-                                    const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                                    setGradingModal({
-                                      isOpen: true,
-                                      testId: duty.testId,
-                                      batch: duty.batch,
-                                      maxMarks: 0,
-                                      testDate: saturdayDateStr,
-                                      subject: duty.subject,
-                                      topic: duty.topic,
-                                      batchStudents
-                                    });
-                                    const initialMarks = {};
-                                    batchStudents.forEach(s => {
-                                      initialMarks[s.id] = '';
-                                    });
-                                    setMarksData(initialMarks);
-                                  }}>Upload Marks</button>
-                                )}
-
-                                <span style={{ background: duty.workflow?.status === 'final_published' ? '#dcfce7' : '#fef3c7', color: duty.workflow?.status === 'final_published' ? '#166534' : '#92400e', padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>
-                                  Kaksh: {duty.room}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={{ overflowX: 'auto', borderTop: '1px solid var(--surface-border)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontFamily: 'var(--font-body)', fontSize: '13px' }}>
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Clean, Full-Width Weekly Table Grid */}
+                  <div className="portal-card" style={{ padding: 0, borderRadius: '12px', overflow: 'hidden', background: '#ffffff', border: '1px solid var(--surface-border)', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', textAlign: 'left', fontFamily: 'var(--font-body)', fontSize: '12px' }}>
                         <thead>
-                          <tr style={{ background: '#f8fafc' }}>
-                            <th style={{ width: '170px', padding: '14px 16px', borderRight: '1px solid var(--surface-border)', borderBottom: '1px solid var(--surface-border)', fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                              TIME SLOT
+                          <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid var(--surface-border)' }}>
+                            <th style={{ width: '75px', padding: '10px 4px', borderRight: '1px solid var(--surface-border)', fontSize: '10px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', background: '#f8fafc', textAlign: 'center' }}>
+                              SLOT
                             </th>
                             {daysOfWeek.map(day => {
                               const isToday = day === todayName;
@@ -4196,21 +4160,20 @@ export default function TeacherDashboard({ profile }) {
                                 <th
                                   key={day}
                                   style={{
-                                    padding: '14px 16px',
+                                    padding: '10px 6px',
                                     borderRight: '1px solid var(--surface-border)',
-                                    borderBottom: '1px solid var(--surface-border)',
-                                    minWidth: '130px',
-                                    fontSize: '12px',
-                                    fontWeight: '700',
-                                    color: isToday ? '#1d4ed8' : '#475569',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    color: isToday ? '#1d4ed8' : '#334155',
                                     background: isToday ? '#eff6ff' : '#f8fafc',
-                                    borderTop: isToday ? '3px solid #2563eb' : 'none'
+                                    borderTop: isToday ? '3px solid #2563eb' : 'none',
+                                    textAlign: 'center'
                                   }}
                                 >
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                                     <span>{day}</span>
                                     {isToday && (
-                                      <span style={{ background: '#2563eb', color: '#ffffff', fontSize: '9px', fontWeight: '800', padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.5px' }}>
+                                      <span style={{ background: '#2563eb', color: '#ffffff', fontSize: '8px', fontWeight: '800', padding: '1px 4px', borderRadius: '3px', letterSpacing: '0.3px' }}>
                                         TODAY
                                       </span>
                                     )}
@@ -4221,22 +4184,37 @@ export default function TeacherDashboard({ profile }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {slots.map((slot, slotIdx) => (
+                          {slots.map((slot) => (
                             <tr key={slot} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                              <td style={{ padding: '14px 16px', borderRight: '1px solid var(--surface-border)', background: '#f8fafc', fontFamily: 'var(--font-mono)', fontWeight: '700', fontSize: '12px', color: '#0f172a', verticalAlign: 'top' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--brand-primary)' }}>schedule</span>
-                                  <span>{slot}</span>
-                                </div>
+                              {/* Left Time Slot Header (Compact 75px) */}
+                              <td style={{ width: '75px', padding: '8px 4px', borderRight: '1px solid var(--surface-border)', background: '#f8fafc', verticalAlign: 'middle', textAlign: 'center' }}>
+                                {(() => {
+                                  const parts = slot.includes(' TO ') ? slot.split(' TO ') : slot.split(' - ');
+                                  const sTime = (parts[0] || '').trim().replace(/^0/, '');
+                                  const eTime = (parts[1] || '').trim().replace(/^0/, '');
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.25 }}>
+                                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', whiteSpace: 'nowrap' }}>{sTime}</span>
+                                      <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '600' }}>to</span>
+                                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', whiteSpace: 'nowrap' }}>{eTime}</span>
+                                    </div>
+                                  );
+                                })()}
                               </td>
+
+                              {/* Day Columns */}
                               {daysOfWeek.map(day => {
                                 const isToday = day === todayName;
-                                const lecs = scheduleMatrix[slot][day] || [];
+                                let lecs = scheduleMatrix[slot][day] || [];
+                                if (timetableBatchFilter !== 'ALL') {
+                                  lecs = lecs.filter(l => l.batch === timetableBatchFilter);
+                                }
+
                                 return (
                                   <td
                                     key={day}
                                     style={{
-                                      padding: '10px 12px',
+                                      padding: '6px 6px',
                                       borderRight: '1px solid var(--surface-border)',
                                       verticalAlign: 'top',
                                       background: isToday ? '#fafcff' : '#ffffff'
@@ -4244,46 +4222,73 @@ export default function TeacherDashboard({ profile }) {
                                   >
                                     {lecs.length === 0 ? (
                                       day === 'SUNDAY' ? (
-                                        <div style={{ background: '#f1f5f9', padding: '6px 8px', borderRadius: '6px', color: '#64748b', fontWeight: '600', fontSize: '11px', textAlign: 'center' }}>
-                                          Holiday
+                                        <div style={{ background: '#f1f5f9', padding: '6px 4px', borderRadius: '5px', color: '#94a3b8', fontWeight: '600', fontSize: '10px', textAlign: 'center' }}>
+                                          🌴 Holiday
                                         </div>
                                       ) : (
-                                        <div style={{ color: '#cbd5e1', textAlign: 'center', padding: '16px 0', fontSize: '14px' }}>—</div>
+                                        <div style={{ color: '#cbd5e1', textAlign: 'center', padding: '8px 0', fontSize: '12px' }}>
+                                          —
+                                        </div>
                                       )
                                     ) : (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {lecs.map((lec, i) => (
-                                          <div
-                                            key={i}
-                                            style={{
-                                              background: '#ffffff',
-                                              padding: '10px 12px',
-                                              borderRadius: '8px',
-                                              border: '1px solid var(--surface-border)',
-                                              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-                                              display: 'flex',
-                                              flexDirection: 'column',
-                                              gap: '4px'
-                                            }}
-                                          >
-                                            <strong style={{ fontSize: '13px', color: '#0f172a', fontWeight: '700' }}>
-                                              {lec.batch}
-                                            </strong>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                              <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: '700' }}>
-                                                {lec.subject}
-                                              </span>
-                                              <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontWeight: '600' }}>
-                                                📍 Kaksh: {lec.room}
-                                              </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {lecs.map((lec, i) => {
+                                          const theme = getSubjectTheme(lec.subject);
+                                          const times = slot.includes(' TO ') ? slot.split(' TO ') : slot.split(' - ');
+                                          const clsData = {
+                                            id: `${slot}_${lec.batch}_${day}`,
+                                            startTime: times[0]?.trim() || '',
+                                            endTime: times[1]?.trim() || slot,
+                                            batch: lec.batch,
+                                            subject: lec.subject,
+                                            room: lec.room,
+                                            topic: lec.topic
+                                          };
+
+                                          return (
+                                            <div
+                                              key={i}
+                                              style={{
+                                                background: '#ffffff',
+                                                border: `1px solid ${theme.border}`,
+                                                borderLeft: `3px solid ${theme.color}`,
+                                                borderRadius: '5px',
+                                                padding: '4px 6px',
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '2px',
+                                                cursor: 'pointer',
+                                                overflow: 'hidden',
+                                                transition: 'all 0.15s ease'
+                                              }}
+                                              onClick={() => setPostLectureModal({ isOpen: true, classData: clsData })}
+                                              title={`Click to report • ${lec.batch} (${lec.subject}) - Kaksh: ${lec.room}`}
+                                            >
+                                              {/* Batch Name & Subject Pill */}
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                                                <strong style={{ fontSize: '11px', color: '#0f172a', fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  {lec.batch}
+                                                </strong>
+                                                <span style={{ fontSize: '9px', fontWeight: '800', color: theme.color, background: theme.bg, padding: '1px 4px', borderRadius: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                                  {lec.subject}
+                                                </span>
+                                              </div>
+
+                                              {/* Kaksh & Topic Inline */}
+                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, fontSize: '10px' }}>
+                                                <span style={{ color: '#b45309', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                  📍 {lec.room}
+                                                </span>
+                                                {lec.topic && (
+                                                  <span style={{ color: '#64748b', fontSize: '9px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60px' }} title={lec.topic}>
+                                                    {lec.topic}
+                                                  </span>
+                                                )}
+                                              </div>
                                             </div>
-                                            {lec.topic && (
-                                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.3 }}>
-                                                {lec.topic}
-                                              </span>
-                                            )}
-                                          </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     )}
                                   </td>
@@ -4295,9 +4300,85 @@ export default function TeacherDashboard({ profile }) {
                       </table>
                     </div>
                   </div>
-                );
-              })()}
-            </div>
+
+                  {/* Saturday Test Duties (Compact footer section if any) */}
+                  {upcomingTestDuties.length > 0 && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '12px 16px', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#d97706' }}>notification_important</span>
+                          <strong style={{ color: '#92400e', fontSize: '13px' }}>
+                            Upcoming Saturday Test Duties ({saturdayDateStr})
+                          </strong>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '600' }}>
+                          {upcomingTestDuties.length} Duties Assigned
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        {upcomingTestDuties.map((duty, idx) => (
+                          <div key={idx} style={{ background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: duty.workflow?.status === 'final_published' ? '1px solid #86efac' : '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <strong style={{ fontSize: '13px', color: '#0f172a' }}>{duty.batch}</strong>
+                              <span style={{ fontSize: '11px', color: '#1d4ed8', background: '#eff6ff', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>{duty.subject}</span>
+                              <span style={{ fontSize: '11px', color: '#92400e', background: '#fffbeb', padding: '2px 6px', borderRadius: '4px', fontWeight: '600' }}>📍 {duty.room}</span>
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                Prepared by: <strong>{duty.prepName}</strong> | Checked by: <strong>{duty.checkName}</strong>
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {duty.isPreparer && (!duty.workflow || duty.workflow.status === 'draft_submitted') && (
+                                <button
+                                  className="btn-primary btn-xs"
+                                  onClick={() => setDraftModal({ isOpen: true, duty, link: '', startDate })}
+                                  style={{ background: duty.workflow?.status === 'draft_submitted' ? '#16a34a' : 'var(--brand-primary)', fontSize: '11px', padding: '4px 10px', borderRadius: '6px' }}
+                                >
+                                  {duty.workflow?.status === 'draft_submitted' ? 'Draft Submitted ✓' : 'Submit Draft'}
+                                </button>
+                              )}
+                              {duty.workflow?.finalLink && (
+                                <a href={duty.workflow.finalLink} target="_blank" rel="noreferrer" style={{ padding: '4px 8px', fontSize: '11px', fontWeight: '600', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: '6px', textDecoration: 'none' }}>
+                                  Test Paper
+                                </a>
+                              )}
+                              {duty.workflow?.solutionsLink && (
+                                <a href={duty.workflow.solutionsLink} target="_blank" rel="noreferrer" style={{ padding: '4px 8px', fontSize: '11px', fontWeight: '600', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '6px', textDecoration: 'none' }}>
+                                  Solutions
+                                </a>
+                              )}
+                              {duty.isChecker && duty.workflow?.status === 'final_published' && (
+                                <button className="btn-primary btn-xs" style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }} onClick={async () => {
+                                  const { getDocs, query, collection, where } = await import('firebase/firestore');
+                                  const studentsSnap = await getDocs(query(collection(db, 'students'), where('batch', '==', duty.batch)));
+                                  const batchStudents = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                                  setGradingModal({
+                                    isOpen: true,
+                                    testId: duty.testId,
+                                    batch: duty.batch,
+                                    maxMarks: 0,
+                                    testDate: saturdayDateStr,
+                                    subject: duty.subject,
+                                    topic: duty.topic,
+                                    batchStudents
+                                  });
+                                  const initialMarks = {};
+                                  batchStudents.forEach(s => { initialMarks[s.id] = ''; });
+                                  setMarksData(initialMarks);
+                                }}>
+                                  Upload Marks
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()
           )}
         </div>
       )}
