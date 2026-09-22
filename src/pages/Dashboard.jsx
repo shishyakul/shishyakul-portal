@@ -1,6 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 import SystemAdminDashboard from '../components/dashboards/SystemAdminDashboard';
-import AdminDashboard from '../components/dashboards/AdminDashboard';
+import BranchManagerDashboard from '../components/dashboards/BranchManagerDashboard';
 import ServiceManagerDashboard from '../components/dashboards/ServiceManagerDashboard';
 import FrontendDeskDashboard from '../components/dashboards/FrontendDeskDashboard';
 import InventoryDashboard from '../components/dashboards/InventoryDashboard';
@@ -22,7 +22,7 @@ export default function Dashboard() {
     case 'admin':
       return <SystemAdminDashboard profile={profile} />;
     case 'branch_manager':
-      return <AdminDashboard profile={profile} />;
+      return <BranchManagerDashboard profile={profile} />;
     case 'service_manager':
       return <ServiceManagerDashboard profile={profile} />;
     case 'inventory_manager':

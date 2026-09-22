@@ -170,12 +170,28 @@
   gap: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
   transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
 }
 
 .sad-kpi-card:hover {
-  border-color: rgba(253, 180, 42, 0.4);
+  border-color: rgba(253, 180, 42, 0.5);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.08);
+}
+
+.sad-kpi-arrow {
+  margin-left: auto;
+  color: var(--text-muted, #9ca3af);
+  font-size: 18px;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.sad-kpi-card:hover .sad-kpi-arrow {
+  color: #d97706;
+  transform: translateX(3px);
 }
 
 .sad-kpi-icon-wrap {

@@ -279,9 +279,9 @@ export default function SystemAdminDashboard({ profile }) {
         </div>
       </div>
 
-      {/* ── 2. Primary Commercial KPIs (Apple Bento Grid) ── */}
+      {/* ── 2. Primary Commercial KPIs (Apple Bento Grid - Clickable) ── */}
       <div className="sad-kpi-grid">
-        <div className="sad-kpi-card">
+        <Link to="/fees" className="sad-kpi-card" title="View Fees Ledger">
           <div className="sad-kpi-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#059669' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 26 }}>payments</span>
           </div>
@@ -293,9 +293,10 @@ export default function SystemAdminDashboard({ profile }) {
               {metrics.collectionRate}% recovery rate
             </span>
           </div>
-        </div>
+          <span className="material-symbols-outlined sad-kpi-arrow">chevron_right</span>
+        </Link>
 
-        <div className="sad-kpi-card">
+        <Link to="/fees" className="sad-kpi-card" title="View Pending Dues in Fees Ledger">
           <div className="sad-kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 26 }}>pending_actions</span>
           </div>
@@ -304,9 +305,14 @@ export default function SystemAdminDashboard({ profile }) {
             <span className="sad-kpi-value" style={{ color: '#d97706' }}>₹{metrics.totalPending.toLocaleString()}</span>
             <span className="sad-kpi-sub">Expected: ₹{metrics.totalExpected.toLocaleString()}</span>
           </div>
-        </div>
+          <span className="material-symbols-outlined sad-kpi-arrow">chevron_right</span>
+        </Link>
 
-        <div className="sad-kpi-card">
+        <div
+          className="sad-kpi-card"
+          onClick={() => setActiveSubtab('recovery')}
+          title="Jump to Installment Recovery Calling Queue"
+        >
           <div className="sad-kpi-icon-wrap" style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 26 }}>phone_in_talk</span>
           </div>
@@ -315,9 +321,10 @@ export default function SystemAdminDashboard({ profile }) {
             <span className="sad-kpi-value">{installmentQueue.length}</span>
             <span className="sad-kpi-sub">Students awaiting reminder calls</span>
           </div>
+          <span className="material-symbols-outlined sad-kpi-arrow">chevron_right</span>
         </div>
 
-        <div className="sad-kpi-card">
+        <Link to="/admissions" className="sad-kpi-card" title="View Admissions CRM Pipeline">
           <div className="sad-kpi-icon-wrap" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 26 }}>school</span>
           </div>
@@ -326,7 +333,8 @@ export default function SystemAdminDashboard({ profile }) {
             <span className="sad-kpi-value">{metrics.funnel.admitted}</span>
             <span className="sad-kpi-sub">Pipeline Conv: {metrics.conversionRate}%</span>
           </div>
-        </div>
+          <span className="material-symbols-outlined sad-kpi-arrow">chevron_right</span>
+        </Link>
       </div>
 
       {/* ── 3. Navigation Subtabs Bar ── */}
