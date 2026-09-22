@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
+import SystemAdminDashboard from '../components/dashboards/SystemAdminDashboard';
 import AdminDashboard from '../components/dashboards/AdminDashboard';
 import ServiceManagerDashboard from '../components/dashboards/ServiceManagerDashboard';
 import FrontendDeskDashboard from '../components/dashboards/FrontendDeskDashboard';
@@ -19,6 +20,7 @@ export default function Dashboard() {
 
   switch (profile.role) {
     case 'admin':
+      return <SystemAdminDashboard profile={profile} />;
     case 'branch_manager':
       return <AdminDashboard profile={profile} />;
     case 'service_manager':
